@@ -112,7 +112,7 @@
 "No network connections of any kind." = "Нет никаких сетевых соединений.";
 "No Screen Recording or microphone access." = "Не нужен доступ к записи экрана и микрофону.";
 "Accessibility is requested only for the optional volume and brightness indicators." = "«Универсальный доступ» запрашивается только для необязательных индикаторов громкости и яркости.";
-"Open source under the MIT licence." = "Открытый исходный код, лицензия MIT.";
+"Open source under the GNU GPL v3 licence." = "Открытый исходный код, лицензия GNU GPL v3.";
 "Reset all settings…" = "Сбросить все настройки…";
 "Reset all Perch settings to their defaults?" = "Сбросить все настройки Perch к значениям по умолчанию?";
 "Reset" = "Сбросить";

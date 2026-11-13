@@ -378,7 +378,7 @@ private struct AboutPane: View {
                 Label("No network connections of any kind.", systemImage: "wifi.slash")
                 Label("No Screen Recording or microphone access.", systemImage: "lock.shield")
                 Label("Accessibility is requested only for the optional volume and brightness indicators.", systemImage: "hand.raised")
-                Label("Open source under the MIT licence.", systemImage: "chevron.left.forwardslash.chevron.right")
+                Label("Open source under the GNU GPL v3 licence.", systemImage: "chevron.left.forwardslash.chevron.right")
             }
             Section {
                 Button("Reset all settings…") { confirmReset = true }
