@@ -1,0 +1,137 @@
+/* Island and menus */
+"Settings…" = "Настройки…";
+"Quit Perch" = "Завершить Perch";
+"Nothing is playing" = "Ничего не играет";
+"Open the music app" = "Открыть приложение с музыкой";
+"Perch Settings" = "Настройки Perch";
+"Pause" = "Пауза";
+"Play" = "Воспроизвести";
+"Next Track" = "Следующий трек";
+"Previous Track" = "Предыдущий трек";
+
+/* Sidebar */
+"General" = "Основные";
+"Behavior" = "Поведение";
+"Appearance" = "Внешний вид";
+"Music Sources" = "Источники музыки";
+"Shortcuts" = "Горячие клавиши";
+"About" = "О приложении";
+
+/* General */
+"Launch at login" = "Запускать при входе в систему";
+"Show icon in the menu bar" = "Показывать значок в строке меню";
+"Without the icon, open Settings by right-clicking the island or by launching Perch again." = "Без значка настройки открываются правым кликом по острову или повторным запуском Perch.";
+"Display" = "Экран";
+"Show the island on" = "Показывать остров на";
+"Automatic (prefer the notch)" = "Автоматически (экран с вырезом)";
+"Main display" = "Основном экране";
+"Display with the active window" = "Экране с активным окном";
+"Show on displays without a notch" = "Показывать на экранах без выреза";
+"On such displays the island appears as a tab at the top edge while music is playing." = "На таких экранах остров появляется у верхнего края, пока играет музыка.";
+"Hide in full-screen apps" = "Скрывать в полноэкранных приложениях";
+"Language" = "Язык";
+"Interface language" = "Язык интерфейса";
+"System" = "Как в системе";
+"English" = "English";
+"Русский" = "Русский";
+"The language changes after Perch restarts." = "Язык изменится после перезапуска Perch.";
+"Restart now" = "Перезапустить";
+
+/* Behavior */
+"Opening" = "Раскрытие";
+"Open the island" = "Раскрывать остров";
+"On hover" = "При наведении";
+"On click" = "По клику";
+"Delay before opening" = "Задержка перед раскрытием";
+"Click on the collapsed island" = "Клик по свёрнутому острову";
+"Expand the island" = "Раскрыть остров";
+"Play / pause" = "Пауза / воспроизведение";
+"Do nothing" = "Ничего не делать";
+"Delay before closing" = "Задержка перед закрытием";
+"Haptic feedback on the trackpad" = "Тактильный отклик трекпада";
+"Track changes" = "Смена трека";
+"Briefly show the new track's name" = "Ненадолго показывать название нового трека";
+"Show for" = "Показывать";
+"Hide the island when paused" = "Скрывать остров на паузе";
+"Never" = "Никогда";
+"After 5 seconds" = "Через 5 секунд";
+"After 15 seconds" = "Через 15 секунд";
+"After 30 seconds" = "Через 30 секунд";
+"After 1 minute" = "Через 1 минуту";
+"After 5 minutes" = "Через 5 минут";
+"Gestures" = "Жесты";
+"Swipe sideways with two fingers to change track" = "Смахивание двумя пальцами вбок переключает трек";
+"Reverse swipe direction" = "Обратное направление смахивания";
+"%.2f s" = "%.2f с";
+
+/* Appearance */
+"Expanded player" = "Раскрытый плеер";
+"Size" = "Размер";
+"Animation" = "Анимация";
+"Snappy" = "Быстрая";
+"Smooth" = "Плавная";
+"Relaxed" = "Неспешная";
+"Glow in the colour of the artwork" = "Свечение в цвет обложки";
+"Shadow under the island" = "Тень под островом";
+"Show the album name" = "Показывать название альбома";
+"Right-hand time label" = "Время справа";
+"Time remaining" = "Оставшееся время";
+"Total duration" = "Длительность трека";
+"Preview the expanded island" = "Показать раскрытый остров";
+"Collapsed island" = "Свёрнутый остров";
+"Swap the artwork and the visualizer" = "Поменять местами обложку и визуализатор";
+"Visualizer" = "Визуализатор";
+"Show the visualizer" = "Показывать визуализатор";
+"Colour" = "Цвет";
+"From the artwork" = "Из обложки";
+"White" = "Белый";
+"System accent" = "Системный акцент";
+"The visualizer is decorative. Perch never records or analyses audio." = "Визуализатор декоративный. Perch не записывает и не анализирует звук.";
+
+/* Sources */
+"Apps appear here once they start playing something." = "Приложения появятся здесь, когда начнут что-нибудь воспроизводить.";
+"Apps shown in the island" = "Приложения, которые показывает остров";
+"Perch shows whatever macOS reports as “Now Playing”. Turn off an app, a browser for example, to ignore what it plays." = "Perch показывает то, что macOS считает «Исполняется». Отключите приложение, например браузер, чтобы не показывать его звук.";
+"Clear the list" = "Очистить список";
+"Perch cannot read “Now Playing” on this system. The media helper failed to start." = "Perch не может получить данные «Исполняется» в этой системе: вспомогательный процесс не запустился.";
+
+/* Shortcuts */
+"Global shortcuts" = "Глобальные сочетания клавиш";
+"Shortcuts work in any app and need at least ⌘, ⌥ or ⌃. Press Esc to cancel recording." = "Сочетания работают в любом приложении и должны включать ⌘, ⌥ или ⌃. Esc отменяет запись.";
+"Next track" = "Следующий трек";
+"Previous track" = "Предыдущий трек";
+"Open or close the island" = "Раскрыть или свернуть остров";
+"Press a shortcut…" = "Нажмите сочетание…";
+"Record" = "Записать";
+"Remove shortcut" = "Удалить сочетание";
+
+/* About */
+"A music player for the MacBook notch." = "Музыкальный плеер для выреза MacBook.";
+"Privacy" = "Конфиденциальность";
+"No telemetry, analytics or crash reporting." = "Нет телеметрии, аналитики и отчётов о сбоях.";
+"No network connections of any kind." = "Нет никаких сетевых соединений.";
+"No Screen Recording or microphone access." = "Не нужен доступ к записи экрана и микрофону.";
+"Accessibility is requested only for the optional volume and brightness indicators." = "«Универсальный доступ» запрашивается только для необязательных индикаторов громкости и яркости.";
+"Open source under the MIT licence." = "Открытый исходный код, лицензия MIT.";
+"Reset all settings…" = "Сбросить все настройки…";
+"Reset all Perch settings to their defaults?" = "Сбросить все настройки Perch к значениям по умолчанию?";
+"Reset" = "Сбросить";
+
+/* Volume & brightness */
+"Volume & Brightness" = "Громкость и яркость";
+"Show volume and brightness in the island" = "Показывать громкость и яркость в острове";
+"Accessibility access is granted." = "Доступ «Универсальный доступ» предоставлен.";
+"Perch needs Accessibility access to take over the volume and brightness keys." = "Perch нужен «Универсальный доступ», чтобы перехватывать клавиши громкости и яркости.";
+"Open System Settings" = "Открыть Системные настройки";
+"This replaces the system indicators. Perch receives only the media keys, never ordinary keystrokes. Hold ⌥⇧ for finer steps." = "Заменяет системные индикаторы. Perch получает только медиа-клавиши, обычный ввод с клавиатуры ему недоступен. Удерживайте ⌥⇧ для мелкого шага.";
+"Volume" = "Громкость";
+"Brightness" = "Яркость";
+"Position" = "Расположение";
+"Beside the notch" = "По бокам от выреза";
+"Below the notch" = "Под вырезом";
+"Bar colour" = "Цвет полосы";
+"Show the value as a number" = "Показывать значение числом";
+"Hide after" = "Скрывать через";
+"Preview" = "Показать пример";
+"If Perch is already in the list and switched on, remove it with the “−” button and add it again: macOS keeps an entry for an older build." = "Если Perch уже есть в списке и включён, удалите его кнопкой «−» и добавьте снова: macOS хранит запись от старой сборки.";
+"This shortcut is already used by macOS or another app." = "Это сочетание уже занято macOS или другим приложением.";
