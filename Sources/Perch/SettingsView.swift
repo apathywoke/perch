@@ -479,6 +479,7 @@ private struct LyricsPane: View {
     @AppStorage(Pref.lyricsWordByWord) private var wordByWord = true
     @AppStorage(Pref.lyricsSpace) private var space = LyricsSpace.medium
     @AppStorage(Pref.lyricsDelay) private var delay = 0.0
+    @AppStorage(Pref.lyricsListen) private var listen = false
 
     var body: some View {
         Form {
@@ -503,6 +504,25 @@ private struct LyricsPane: View {
                     Text("Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise. If the lyrics run ahead of the singing, move the slider to the right; if they lag behind, to the left. Bluetooth headphones often need about +0.2 s.")
                 }
                 Section {
+                    Toggle(isOn: $listen) {
+                        HStack(spacing: 6) {
+                            Text("Time words by ear")
+                            Text("Experimental")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.orange.opacity(0.2)))
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .disabled(!SongListener.isSupported && !listen)
+                    if listen { ListeningStatus() }
+                } footer: {
+                    Text(SongListener.isSupported
+                         ? "Perch listens to the player and recognises the sung words on this Mac to time the lyrics exactly. Nothing is recorded or sent; what was heard is remembered per song, so the next listen is exact from the start. macOS asks for permission and shows the recording indicator while Perch listens. Works with songs in most languages, Russian and English included; the speech model may be downloaded from Apple once."
+                         : "Needs macOS 26 or later.")
+                }
+                Section {
                     TilePicker(selection: $space, options: LyricsSpace.allCases.map { option in
                         TileOption(value: option, title: option.title) { linesSample(option.lines) }
                     })
@@ -522,6 +542,61 @@ private struct LyricsPane: View {
                 } footer: {
                     Text("Open the lyrics with the button on the left of the player controls. Tap a line to jump to it.")
                 }
+            }
+        }
+    }
+
+    private struct ListeningStatus: View {
+        @ObservedObject private var listener = SongListener.shared
+        @State private var confirmForget = false
+
+        var body: some View {
+            LabeledContent("Status") {
+                HStack(spacing: 6) {
+                    Circle().fill(color).frame(width: 7, height: 7)
+                    Text(text)
+                }
+                .foregroundStyle(.secondary)
+            }
+            if listener.totalWords > 0, listener.status == .listening || listener.timedWords > 0 {
+                LabeledContent("Words timed in this song") {
+                    Text(verbatim: "\(listener.timedWords) / \(listener.totalWords)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if case .noSound = listener.status {
+                Button("Open Privacy Settings") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture")!)
+                }
+            }
+            Button("Forget what was heard…") { confirmForget = true }
+                .confirmationDialog("Forget the timing heard in every song?", isPresented: $confirmForget) {
+                    Button("Forget", role: .destructive) { listener.forgetAll() }
+                }
+        }
+
+        private var color: Color {
+            switch listener.status {
+            case .listening, .learned: .green
+            case .preparing, .waiting: .yellow
+            case .off: .gray
+            default: .orange
+            }
+        }
+
+        private var text: String {
+            switch listener.status {
+            case .off: NSLocalizedString("Off", comment: "")
+            case .needsNewerSystem: NSLocalizedString("Needs macOS 26 or later", comment: "")
+            case .waiting: NSLocalizedString("Waiting for a song with synced lyrics", comment: "")
+            case .unsupportedLanguage(let name):
+                String(format: NSLocalizedString("Songs in %@ are not supported", comment: ""), name)
+            case .preparing: NSLocalizedString("Getting ready…", comment: "")
+            case .listening: NSLocalizedString("Listening", comment: "")
+            case .learned: NSLocalizedString("This song is already timed by ear", comment: "")
+            case .noSound: NSLocalizedString("No sound: allow Perch to record system audio", comment: "")
+            case .failed(let message): message
             }
         }
     }
@@ -608,7 +683,8 @@ private struct AboutPane: View {
                 PrivacyRow(symbol: "eye.slash.fill", color: .blue, text: "No telemetry, analytics or crash reporting.")
                 PrivacyRow(symbol: "wifi.slash", color: .green,
                            text: "No network connections, except update checks and lyrics, if you turn them on.")
-                PrivacyRow(symbol: "lock.fill", color: .orange, text: "No Screen Recording or microphone access.")
+                PrivacyRow(symbol: "lock.fill", color: .orange,
+                           text: "No Screen Recording or microphone access. The player's sound is heard only if you turn on timing words by ear, and never leaves this Mac.")
                 PrivacyRow(symbol: "hand.raised.fill", color: .indigo,
                            text: "Accessibility is requested only for the optional volume and brightness indicators.")
                 PrivacyRow(symbol: "music.note", color: .red,

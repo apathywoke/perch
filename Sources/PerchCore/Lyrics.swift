@@ -29,13 +29,16 @@ public struct LyricLine: Equatable, Identifiable {
     public var words: [LyricWord]
     /// The file gave the timing of each word; otherwise it is estimated.
     public var wordSynced: Bool
+    /// How many of the words were timed from the song's audio.
+    public var heard: Int
 
-    public init(id: Int, time: Double, text: String, words: [LyricWord] = [], wordSynced: Bool = false) {
+    public init(id: Int, time: Double, text: String, words: [LyricWord] = [], wordSynced: Bool = false, heard: Int = 0) {
         self.id = id
         self.time = time
         self.text = text
         self.words = words
         self.wordSynced = wordSynced
+        self.heard = heard
     }
 }
 

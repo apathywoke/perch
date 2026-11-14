@@ -158,10 +158,9 @@ private struct SyncedLyricsView: View {
         }
         .onAppear { clock.follow(lines, track) }
         .onChange(of: track) { _, new in clock.follow(lines, new) }
-        .onChange(of: lines) { _, new in
-            ready = false
-            clock.follow(new, track)
-        }
+        // Heard timing changes the times but not the text: keep scrolling smoothly then.
+        .onChange(of: lines.map(\.text)) { _, _ in ready = false }
+        .onChange(of: lines) { _, new in clock.follow(new, track) }
         .onChange(of: delay) { _, _ in clock.follow(lines, track) }
         .onDisappear { clock.stop() }
         .mask {

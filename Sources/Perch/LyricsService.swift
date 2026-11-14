@@ -20,6 +20,8 @@ final class LyricsService: ObservableObject {
     @Published private(set) var state: State = .idle
 
     private var cache: [String: Lyrics?] = [:]
+    /// The synced lines as loaded, before any timing heard from the song.
+    private var base: [LyricLine]?
     private var cacheOrder: [String] = []
     private var currentId: String?
     private var generation = 0
@@ -28,16 +30,18 @@ final class LyricsService: ObservableObject {
     func load(for track: Track?) {
         guard Pref.bool(Pref.lyricsEnabled), let track else {
             currentId = nil
+            base = nil
             state = .idle
             return
         }
         guard track.id != currentId else { return }
         currentId = track.id
         if let cached = cache[track.id] {
-            state = cached.map(State.loaded) ?? .notFound
+            show(cached, for: track)
             return
         }
         state = .loading
+        base = nil
         generation += 1
         let request = generation
         DispatchQueue.global(qos: .userInitiated).async {
@@ -47,7 +51,7 @@ final class LyricsService: ObservableObject {
                 switch result {
                 case .success(let lyrics):
                     self.remember(track.id, lyrics)
-                    self.state = lyrics.map(State.loaded) ?? .notFound
+                    self.show(lyrics, for: track)
                 case .failure(let error):
                     Self.log.error("Lyrics request failed: \(error.localizedDescription, privacy: .public)")
                     self.state = .failed
@@ -60,7 +64,28 @@ final class LyricsService: ObservableObject {
     func showWithoutFetching(_ lyrics: Lyrics, for track: Track) {
         generation += 1
         currentId = track.id
+        base = nil
         state = .loaded(lyrics)
+    }
+
+    private func show(_ lyrics: Lyrics?, for track: Track) {
+        if case .synced(let lines) = lyrics { base = lines } else { base = nil }
+        state = lyrics.map(State.loaded) ?? .notFound
+        SongListener.shared.lyricsLoaded(for: track)
+    }
+
+    /// The synced lyrics of the song on show, without heard timing.
+    func baseLines(for id: String) -> [LyricLine]? {
+        id == currentId ? base : nil
+    }
+
+    /// Times the lyrics of the song on show by the words heard in it.
+    @discardableResult
+    func retime(_ heard: [HeardWord], for id: String) -> [LyricLine]? {
+        guard id == currentId, let base else { return nil }
+        let lines = heard.isEmpty ? base : WordAlignment.align(base, heard: heard)
+        if state != .loaded(.synced(lines)) { state = .loaded(.synced(lines)) }
+        return lines
     }
 
     func retry(for track: Track?) {
@@ -73,6 +98,7 @@ final class LyricsService: ObservableObject {
         generation += 1
         cache.removeAll()
         cacheOrder.removeAll()
+        base = nil
         currentId = nil
         state = .idle
     }
@@ -101,7 +127,8 @@ final class LyricsService: ObservableObject {
         case .idle: "idle"
         case .loading: "loading"
         case .loaded(.synced(let lines)):
-            lines.contains(where: \.wordSynced) ? "synced, word timing exact" : "synced, word timing estimated"
+            lines.contains(where: \.wordSynced) ? "synced, word timing exact"
+                : lines.contains(where: { $0.heard > 0 }) ? "synced, word timing partly heard" : "synced, word timing estimated"
         case .loaded(.plain): "plain lyrics"
         case .loaded(.instrumental): "instrumental"
         case .notFound: "not found"

@@ -18,6 +18,7 @@
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSAppleEventsUsageDescription</key><string>Perch controls Spotify or Music from the island when the system “Now Playing” service misses them.</string>
+    <key>NSAudioCaptureUsageDescription</key><string>Perch listens to the player, only if you turn on “Time words by ear”, to time the lyrics word by word. The sound is recognised on this Mac and never recorded or sent anywhere.</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 apathywoke. GNU GPL v3.</string>
 </dict>
 </plist>

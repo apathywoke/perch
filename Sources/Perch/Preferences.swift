@@ -55,6 +55,7 @@ enum Pref {
     static let lyricsWordByWord = "lyricsWordByWord"
     static let lyricsSpace = "lyricsSpace"
     static let lyricsDelay = "lyricsDelay"
+    static let lyricsListen = "lyricsListen"
     // Updates (off unless the user turns them on)
     static let updateChecks = "updateChecks"
     static let lastUpdateCheck = "lastUpdateCheck"
@@ -101,6 +102,7 @@ enum Pref {
         lyricsWordByWord: true,
         lyricsSpace: LyricsSpace.medium.rawValue,
         lyricsDelay: 0.0,
+        lyricsListen: false,
     ]
 
     private static var store: UserDefaults { .standard }

@@ -269,3 +269,26 @@
 "Many lines" = "Много строк";
 "Timing correction" = "Поправка синхронизации";
 "Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise. If the lyrics run ahead of the singing, move the slider to the right; if they lag behind, to the left. Bluetooth headphones often need about +0.2 s." = "Если в LRCLIB есть время каждого слова, подсветка точная; иначе время слов оценивается по времени строки. Если текст опережает пение, сдвиньте ползунок вправо, если отстаёт — влево. Для Bluetooth-наушников обычно нужно около +0,2 с.";
+
+/* Timing words by ear */
+"Time words by ear" = "Уточнять тайминг по звуку";
+"Experimental" = "Эксперимент";
+"Perch listens to the player and recognises the sung words on this Mac to time the lyrics exactly. Nothing is recorded or sent; what was heard is remembered per song, so the next listen is exact from the start. macOS asks for permission and shows the recording indicator while Perch listens. Works with songs in most languages, Russian and English included; the speech model may be downloaded from Apple once." = "Perch слушает плеер и распознаёт спетые слова прямо на этом Mac, чтобы точно подсвечивать текст. Ничего не записывается и не отправляется; услышанное запоминается для каждой песни, так что при следующем прослушивании тайминг точен с самого начала. macOS попросит разрешение и покажет значок записи, пока Perch слушает. Работает с песнями на большинстве языков, включая русский и английский; модель распознавания может один раз скачаться с серверов Apple.";
+"Needs macOS 26 or later." = "Нужна macOS 26 или новее.";
+"Needs macOS 26 or later" = "Нужна macOS 26 или новее";
+"Status" = "Состояние";
+"Words timed in this song" = "Слов уточнено в этой песне";
+"Open Privacy Settings" = "Открыть настройки конфиденциальности";
+"Forget what was heard…" = "Забыть услышанное…";
+"Forget the timing heard in every song?" = "Забыть тайминг, услышанный во всех песнях?";
+"Forget" = "Забыть";
+"Off" = "Выключено";
+"Waiting for a song with synced lyrics" = "Жду песню с синхронизированным текстом";
+"Songs in %@ are not supported" = "Язык песни (%@) не поддерживается";
+"Getting ready…" = "Подготовка…";
+"Listening" = "Слушаю";
+"No sound: allow Perch to record system audio" = "Нет звука: разрешите Perch запись системного звука";
+"The speech model could not be installed." = "Не удалось установить модель распознавания речи.";
+"The player is not making any sound yet." = "Плеер пока не издаёт звука.";
+"No Screen Recording or microphone access. The player's sound is heard only if you turn on timing words by ear, and never leaves this Mac." = "Нет доступа к записи экрана и микрофону. Звук плеера слушается, только если включено уточнение тайминга по звуку, и не покидает этот Mac.";
+"This song is already timed by ear" = "Эта песня уже выверена по звуку";

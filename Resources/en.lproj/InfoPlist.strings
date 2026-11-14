@@ -1,1 +1,2 @@
 "NSAppleEventsUsageDescription" = "Perch controls Spotify or Music from the island when the system “Now Playing” service misses them.";
+"NSAudioCaptureUsageDescription" = "Perch listens to the player, only if you turn on “Time words by ear”, to time the lyrics word by word. The sound is recognised on this Mac and never recorded or sent anywhere.";
