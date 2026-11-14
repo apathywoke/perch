@@ -109,3 +109,83 @@ struct LyricsTests {
         #expect(LRCLIB.parseSearch(Data("[]".utf8), duration: 200) == nil)
     }
 }
+
+@Suite("Word timing")
+struct WordTimingTests {
+    @Test func readsWordTimestamps() throws {
+        let lines = LRCParser.parse("[00:05.50]<00:05.50>Hello <00:06.00>world<00:06.80>\n[00:09.00]Next")
+        let line = try #require(lines.first)
+        #expect(line.text == "Hello world")
+        #expect(line.wordSynced)
+        #expect(line.words == [LyricWord(text: "Hello", start: 5.5, end: 6.0),
+                               LyricWord(text: "world", start: 6.0, end: 6.8)])
+    }
+
+    @Test func splitsTimedPhrasesIntoWords() throws {
+        let line = try #require(LRCParser.parse("[00:01.00]<00:01.00>one two <00:02.00>three<00:03.00>").first)
+        #expect(line.words.map(\.text) == ["one", "two", "three"])
+        #expect(line.words.map(\.start) == [1, 1.5, 2])
+        #expect(line.words.map(\.end) == [1.5, 2, 3])
+    }
+
+    @Test func wordTimestampsFollowTheOffset() throws {
+        let line = try #require(LRCParser.parse("[offset:+500]\n[00:10.00]<00:10.00>Hi<00:11.00>").first)
+        #expect(line.words.first == LyricWord(text: "Hi", start: 9.5, end: 10.5))
+    }
+
+    @Test func estimatesWordsFromTheLineTiming() throws {
+        let lines = LRCParser.parse("[00:10.00]Hello world\n[00:14.00]Next")
+        let line = try #require(lines.first)
+        #expect(!line.wordSynced)
+        #expect(line.words.map(\.text) == ["Hello", "world"])
+        #expect(line.words.first?.start == 10)
+        // "Hello" has two syllables, "world" one: twice as long.
+        let hello = line.words[0].end - line.words[0].start
+        let world = line.words[1].end - line.words[1].start
+        #expect(abs(hello - 2 * world) < 0.0001)
+        #expect(line.words[0].end == line.words[1].start)
+        #expect(try #require(line.words.last).end < 14)
+    }
+
+    @Test func fastLinesFinishBeforeTheNextOne() throws {
+        let lines = LRCParser.parse("[00:10.00]one two three four five six seven eight nine ten eleven twelve\n[00:12.00]Next")
+        let end = try #require(lines.first?.words.last).end
+        #expect(end <= 12)
+        #expect(end > 11.5)
+    }
+
+    @Test func longPausesAreNotFilledWithSinging() throws {
+        let lines = LRCParser.parse("[00:10.00]Short line\n[00:40.00]After a long solo")
+        let end = try #require(lines.first?.words.last).end
+        #expect(end < 13)
+    }
+
+    @Test func breaksGetThreeDotsAcrossThePause() throws {
+        let lines = LRCParser.parse("[00:10.00]Line\n[00:20.00]\n[00:26.00]Back")
+        let pause = lines[1]
+        #expect(pause.words.map(\.text) == ["•", "•", "•"])
+        #expect(pause.words.first?.start == 20)
+        #expect(pause.words.last?.end == 26)
+    }
+
+    @Test func countsSyllablesInLatinAndCyrillic() {
+        #expect(WordTiming.syllableCount("hello") == 2)
+        #expect(WordTiming.syllableCount("world") == 1)
+        #expect(WordTiming.syllableCount("beautiful") == 3)
+        #expect(WordTiming.syllableCount("привет") == 2)
+        #expect(WordTiming.syllableCount("ночь") == 1)
+        #expect(WordTiming.syllableCount("hmm") == 1)
+        #expect(WordTiming.syllableCount("one") == 1)
+        #expect(WordTiming.syllableCount("make") == 1)
+        #expect(WordTiming.syllableCount("little") == 2)
+        #expect(WordTiming.syllableCount("love,") == 1)
+    }
+
+    @Test func wordProgress() {
+        let word = LyricWord(text: "x", start: 10, end: 12)
+        #expect(word.progress(at: 9) == 0)
+        #expect(word.progress(at: 11) == 0.5)
+        #expect(word.progress(at: 30) == 1)
+        #expect(LyricWord(text: "y", start: 5, end: 5).progress(at: 5) == 1)
+    }
+}

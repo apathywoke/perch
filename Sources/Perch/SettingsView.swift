@@ -476,6 +476,7 @@ private struct SourcesPane: View {
 private struct LyricsPane: View {
     @AppStorage(Pref.lyricsEnabled) private var enabled = false
     @AppStorage(Pref.lyricsSize) private var size = LyricsSize.medium
+    @AppStorage(Pref.lyricsWordByWord) private var wordByWord = true
 
     var body: some View {
         Form {
@@ -490,6 +491,11 @@ private struct LyricsPane: View {
                 Text("Lyrics come from LRCLIB, a free open lyrics database. When you open the lyrics, Perch sends the song's title, artist, album and length to lrclib.net. Nothing else is sent, and lyrics are kept only in memory.")
             }
             if enabled {
+                Section {
+                    Toggle("Highlight word by word", isOn: $wordByWord)
+                } footer: {
+                    Text("Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise.")
+                }
                 Section {
                     TilePicker(selection: $size, options: [
                         TileOption(value: .small, title: "Small") { sizeSample(14) },

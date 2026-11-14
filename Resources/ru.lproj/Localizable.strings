@@ -262,3 +262,5 @@
 "No network connections, except update checks and lyrics, if you turn them on." = "Никаких сетевых соединений, кроме проверки обновлений и текстов песен, если вы их включите.";
 "No releases have been published yet." = "Релизов пока нет.";
 "The connection failed." = "Не удалось подключиться.";
+"Highlight word by word" = "Подсвечивать по словам";
+"Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise." = "Если в LRCLIB есть время каждого слова, подсветка точная; иначе время слов оценивается по времени строки.";

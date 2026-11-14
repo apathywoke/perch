@@ -59,7 +59,7 @@ enum Snapshots {
         [01:00.00]We kept the window open wide
         [01:04.50]And let the evening in
         [01:09.00]Every song we never wrote
-        [01:13.00]Is waiting in the rain
+        [01:11.50]Is waiting in the rain
         [01:17.50]
         [01:21.00]So hold the note a little longer
         [01:25.00]Before the morning comes

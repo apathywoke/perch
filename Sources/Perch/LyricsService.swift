@@ -100,7 +100,8 @@ final class LyricsService: ObservableObject {
         let status = switch state {
         case .idle: "idle"
         case .loading: "loading"
-        case .loaded(.synced): "synced lyrics"
+        case .loaded(.synced(let lines)):
+            lines.contains(where: \.wordSynced) ? "synced, word timing exact" : "synced, word timing estimated"
         case .loaded(.plain): "plain lyrics"
         case .loaded(.instrumental): "instrumental"
         case .notFound: "not found"
