@@ -239,3 +239,26 @@
 "The download is not newer than this version." = "Загруженная версия не новее текущей.";
 "The download is not signed like this copy of Perch, so it was not installed." = "Загруженная версия подписана не так, как эта копия Perch, поэтому она не установлена.";
 "The connection to GitHub failed." = "Не удалось связаться с GitHub.";
+
+/* Hide from screen capture */
+"Hide while the screen is recorded or shared" = "Скрывать при записи и демонстрации экрана";
+"During a screen recording or when you share your screen in a call, the island disappears, so nobody sees what you are listening to. The volume indicator still appears." = "Во время записи экрана или демонстрации экрана в звонке остров исчезает, чтобы никто не видел, что вы слушаете. Индикатор громкости при этом остаётся.";
+
+/* Lyrics */
+"Lyrics" = "Тексты песен";
+"Song lyrics in the island, as in Apple Music." = "Тексты песен в острове, как в Apple Music.";
+"Show lyrics" = "Показывать тексты песен";
+"Lyrics come from LRCLIB, a free open lyrics database. When you open the lyrics, Perch sends the song's title, artist, album and length to lrclib.net. Nothing else is sent, and lyrics are kept only in memory." = "Тексты берутся из LRCLIB — свободной открытой базы текстов. Когда вы открываете текст, Perch отправляет на lrclib.net название песни, исполнителя, альбом и длительность. Больше ничего не отправляется, а тексты хранятся только в памяти.";
+"Text size" = "Размер текста";
+"Small" = "Мелкий";
+"Medium" = "Средний";
+"Large" = "Крупный";
+"Open the lyrics with the button on the left of the player controls. Tap a line to jump to it." = "Текст открывается кнопкой слева в ряду управления. Нажмите на строку, чтобы перейти к ней.";
+"Looking for lyrics…" = "Ищу текст…";
+"No lyrics for this song" = "Для этой песни текста нет";
+"Lyrics could not be loaded" = "Не удалось загрузить текст";
+"Instrumental" = "Инструментал";
+"Lyrics from LRCLIB" = "Текст: LRCLIB";
+"No network connections, except update checks and lyrics, if you turn them on." = "Никаких сетевых соединений, кроме проверки обновлений и текстов песен, если вы их включите.";
+"No releases have been published yet." = "Релизов пока нет.";
+"The connection failed." = "Не удалось подключиться.";

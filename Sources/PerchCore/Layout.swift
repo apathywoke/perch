@@ -67,6 +67,8 @@ public enum NotchLayout {
         public var hudRow: CGFloat
         /// Distance between the centres of the buttons in the control row.
         public var controlSpacing: CGFloat
+        /// Extra height for the lyrics under the controls.
+        public var lyricsHeight: CGFloat
     }
 
     public static func player(notch: CGSize, hasNotch: Bool, scale s: CGFloat) -> PlayerMetrics {
@@ -79,7 +81,8 @@ public enum NotchLayout {
         let controls = scrubber + 40 * s
         return PlayerMetrics(width: width, height: controls + 44 * s, inset: inset, artTop: artTop, art: art,
                              textLeading: inset + art + 16 * s, textTop: textTop, scrubberCenter: scrubber,
-                             controlsCenter: controls, hudRow: 34 * s, controlSpacing: 72 * s)
+                             controlsCenter: controls, hudRow: 34 * s, controlSpacing: 72 * s,
+                             lyricsHeight: 172 * s)
     }
 
     public static func hudSize(style: HUDStyle, notch: CGSize, hasNotch: Bool) -> CGSize {
@@ -94,11 +97,13 @@ public enum NotchLayout {
     /// - Parameters:
     ///   - hud: style of the volume or brightness indicator on screen, if any.
     ///   - swell: the pointer rests on the collapsed island.
+    ///   - lyrics: the open player shows lyrics under the controls.
     public static func size(phase: IslandPhase, notch: CGSize, hasNotch: Bool, active: Bool, scale: CGFloat,
-                            hud: HUDStyle? = nil, swell: Bool = false) -> CGSize {
+                            hud: HUDStyle? = nil, swell: Bool = false, lyrics: Bool = false) -> CGSize {
         if phase == .expanded {
             let player = player(notch: notch, hasNotch: hasNotch, scale: scale)
-            return CGSize(width: player.width, height: player.height + (hud == nil ? 0 : player.hudRow))
+            return CGSize(width: player.width,
+                          height: player.height + (lyrics ? player.lyricsHeight : 0) + (hud == nil ? 0 : player.hudRow))
         }
         if let hud { return hudSize(style: hud, notch: notch, hasNotch: hasNotch) }
         if phase == .peek, active {

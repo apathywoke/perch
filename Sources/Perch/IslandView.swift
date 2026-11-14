@@ -38,10 +38,12 @@ struct IslandView: View {
     @AppStorage(Pref.hudStyle) private var hudStyle = HUDStyle.beside
     @AppStorage(Pref.swapSides) private var swapSides = false
     @AppStorage(Pref.visualizer) private var visualizer = true
+    @AppStorage(Pref.lyricsEnabled) private var lyricsEnabled = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let s = scale
+        let lyrics = model.showLyrics && lyricsEnabled
         let notch = model.notchSize
         let expanded = model.phase == .expanded
         let hud = expanded ? nil : model.hud
@@ -49,7 +51,7 @@ struct IslandView: View {
         let tall = hud != nil && model.hasNotch && hudStyle == .below
         let swell = model.hovering && !reduceMotion && model.phase == .collapsed && hud == nil
         let size = NotchLayout.size(phase: model.phase, notch: notch, hasNotch: model.hasNotch, active: model.active,
-                                    scale: s, hud: model.hud == nil ? nil : hudStyle, swell: swell)
+                                    scale: s, hud: model.hud == nil ? nil : hudStyle, swell: swell, lyrics: lyrics)
         let player = NotchLayout.player(notch: notch, hasNotch: model.hasNotch, scale: s)
         let collapsed = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: model.hasNotch,
                                          active: model.active, scale: s)
@@ -98,11 +100,18 @@ struct IslandView: View {
                         .transition(contentTransition(from: 0.9))
                 }
 
+                if expanded, lyrics, let track = media.track {
+                    LyricsPanel(track: track, scale: s) { media.seek(to: $0) }
+                        .frame(width: player.width - 2 * player.inset, height: player.lyricsHeight)
+                        .offset(y: player.height - 12 * s)
+                        .transition(contentTransition(from: 0.96))
+                }
+
                 // While the player is open, the indicator gets its own row at the bottom.
                 if expanded, let state = model.hud {
                     HUDView(state: state, layout: .plain(height: player.hudRow), tint: media.tint)
                         .frame(width: player.width, height: player.hudRow)
-                        .offset(y: player.height - 10 * s)
+                        .offset(y: player.height + (lyrics ? player.lyricsHeight : 0) - 10 * s)
                         .transition(contentTransition(from: 0.9))
                 }
 
@@ -404,6 +413,7 @@ private struct ExpandedView: View {
     @AppStorage(Pref.artworkGlow) private var glow = true
     @AppStorage(Pref.showAlbum) private var showAlbum = false
     @AppStorage(Pref.visualizer) private var visualizer = true
+    @AppStorage(Pref.lyricsEnabled) private var lyricsEnabled = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -421,6 +431,9 @@ private struct ExpandedView: View {
                             LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
                                 .frame(height: 46 * s)
                             Color.black
+                            // Fades out at the bottom, so lyrics below start on plain black.
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 40 * s)
                         }
                     }
                     .allowsHitTesting(false)
@@ -489,7 +502,16 @@ private struct ExpandedView: View {
         let buttonWidth = 46 * s, buttonHeight = 36 * s
         return HStack(spacing: 0) {
             Group {
-                if let icon = media.sourceIcon, let name = media.sourceName {
+                if lyricsEnabled {
+                    // With lyrics on, this slot opens them; the artwork still opens the music app.
+                    ControlButton(width: buttonWidth, height: buttonHeight, label: "Lyrics",
+                                  selected: model.showLyrics, action: { NotchController.shared.toggleLyrics() }) {
+                        Image(systemName: model.showLyrics ? "quote.bubble.fill" : "quote.bubble")
+                            .font(.system(size: 16 * s, weight: .semibold))
+                            .foregroundStyle(.white.opacity(model.showLyrics ? 1 : 0.6))
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                } else if let icon = media.sourceIcon, let name = media.sourceName {
                     ControlButton(width: buttonWidth, height: buttonHeight, label: "Open \(name)",
                                   action: { media.openSourceApp() }) {
                         Image(nsImage: icon).resizable().frame(width: 19 * s, height: 19 * s).opacity(0.9)
@@ -921,6 +943,7 @@ private struct ControlButton<Icon: View>: View {
     let width: CGFloat
     let height: CGFloat
     let label: LocalizedStringKey
+    var selected = false
     let action: () -> Void
     @ViewBuilder let icon: () -> Icon
     @State private var hovering = false
@@ -931,7 +954,7 @@ private struct ControlButton<Icon: View>: View {
                 .frame(width: width, height: height)
                 .background(
                     RoundedRectangle(cornerRadius: height * 0.3, style: .continuous)
-                        .fill(.white.opacity(hovering ? 0.12 : 0))
+                        .fill(.white.opacity(selected ? 0.16 : (hovering ? 0.12 : 0)))
                 )
                 .contentShape(Rectangle())
         }
@@ -939,6 +962,7 @@ private struct ControlButton<Icon: View>: View {
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: hovering)
         .accessibilityLabel(Text(label))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private struct PressStyle: ButtonStyle {

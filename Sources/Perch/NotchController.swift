@@ -17,6 +17,8 @@ final class NotchModel: ObservableObject {
     @Published var hovering = false
     /// Volume / brightness indicator currently shown, if any.
     @Published var hud: HUDState?
+    /// The open player shows lyrics (only while the feature is on).
+    @Published var showLyrics = Pref.bool(Pref.lyricsOpen)
 }
 
 private final class NotchPanel: NSPanel {
@@ -44,6 +46,8 @@ final class NotchController {
     private var track: Track?
     private var pausedTooLong = false
     private var fullscreen = false
+    private var capturing = false
+    private var captureTimer: Timer?
     private var seenFirstTrack = false
 
     private var cancellables = Set<AnyCancellable>()
@@ -58,7 +62,7 @@ final class NotchController {
     private var swipeAccumulated: CGFloat = 0
     private var swipeFired = false
 
-    private static let panelSize = CGSize(width: 760, height: 380)
+    private static let panelSize = CGSize(width: 800, height: 560)
 
     // MARK: Setup
 
@@ -146,8 +150,10 @@ final class NotchController {
             fullscreen = nowFullscreen
             Self.log.notice("Full-screen space: \(nowFullscreen)")
         }
+        updateCaptureWatch()
         let active = track != nil && !pausedTooLong
-        let visible = model.hud != nil || !fullscreen
+        // The volume indicator stays even during a recording: it says nothing about the music.
+        let visible = model.hud != nil || !fullscreen && !capturing
             && (geometry.hasNotch || (Pref.bool(Pref.showOnNonNotch) && (active || model.phase == .expanded)))
 
         let frame = CGRect(x: screen.frame.midX - Self.panelSize.width / 2,
@@ -168,6 +174,45 @@ final class NotchController {
         }
         cachedHitRect = nil
         evaluateMouse()
+    }
+
+    // MARK: Screen recording and sharing
+
+    private typealias WatcherFn = @convention(c) () -> Bool
+    /// SkyLight reports whether anything is capturing the screen (recording, a call
+    /// sharing the screen, QuickTime…). There is no public API for this.
+    private static let screenWatcher: WatcherFn? = {
+        let handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY)
+        guard let symbol = dlsym(handle, "SLSIsScreenWatcherPresent") else { return nil }
+        return unsafeBitCast(symbol, to: WatcherFn.self)
+    }()
+
+    /// With "Hide while the screen is recorded or shared" on, the island asks capture
+    /// tools to leave it out (older ones honour that) and disappears while a capture
+    /// is running, because ScreenCaptureKit on macOS 15.4+ ignores the request.
+    private func updateCaptureWatch() {
+        let wanted = Pref.bool(Pref.hideFromCapture)
+        let sharing: NSWindow.SharingType = wanted ? .none : .readOnly
+        if panel?.sharingType != sharing { panel?.sharingType = sharing }
+        if wanted, captureTimer == nil, Self.screenWatcher != nil {
+            let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.pollCapture() }
+            timer.tolerance = 0.3
+            RunLoop.main.add(timer, forMode: .common)
+            captureTimer = timer
+            capturing = Self.screenWatcher?() ?? false
+        } else if !wanted, captureTimer != nil {
+            captureTimer?.invalidate()
+            captureTimer = nil
+            capturing = false
+        }
+    }
+
+    private func pollCapture() {
+        let now = Self.screenWatcher?() ?? false
+        guard now != capturing else { return }
+        capturing = now
+        Self.log.notice("Screen capture \(now ? "started; hiding the island" : "ended", privacy: .public)")
+        refresh()
     }
 
     private typealias CGSConnectionFn = @convention(c) () -> Int32
@@ -304,6 +349,14 @@ final class NotchController {
 
     func toggle() { model.phase == .expanded ? collapse() : expand() }
 
+    func toggleLyrics() {
+        let open = !model.showLyrics
+        withAnimation(open ? Motion.grow : Motion.shrink) { model.showLyrics = open }
+        Pref.set(open, Pref.lyricsOpen)
+        cachedHitRect = nil
+        evaluateMouse()
+    }
+
     func collapsedClicked() {
         if Pref.value(Pref.openTrigger, OpenTrigger.hover) == .click { expand(); return }
         switch Pref.value(Pref.clickAction, ClickAction.expand) {
@@ -334,7 +387,8 @@ final class NotchController {
         let size = NotchLayout.size(phase: model.phase, notch: model.notchSize, hasNotch: model.hasNotch,
                                     active: model.active, scale: Pref.double(Pref.scale),
                                     hud: model.hud == nil ? nil : Pref.value(Pref.hudStyle, HUDStyle.beside),
-                                    swell: model.hovering && !Motion.reduced)
+                                    swell: model.hovering && !Motion.reduced,
+                                    lyrics: model.showLyrics && Pref.bool(Pref.lyricsEnabled))
         let pad: CGFloat = model.phase == .expanded ? 12 : 0
         return CGRect(x: screen.frame.midX - size.width / 2 - pad, y: screen.frame.maxY - size.height - pad,
                       width: size.width + pad * 2, height: size.height + pad + 2)
@@ -431,6 +485,8 @@ final class NotchController {
             ("Music shown", model.active ? "yes" : "no"),
             ("Notch", model.hasNotch ? "\(Int(model.notchSize.width))×\(Int(model.notchSize.height))" : "none"),
             ("Full-screen space", fullscreen ? "yes" : "no"),
+            ("Hide while captured", Pref.bool(Pref.hideFromCapture) ? "on" : "off"),
+            ("Screen being captured", capturing ? "yes" : "no"),
             ("Indicator on screen", model.hud == nil ? "no" : "yes"),
         ]
     }

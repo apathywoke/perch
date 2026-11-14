@@ -32,11 +32,12 @@ if [ -n "$FOUND" ]; then
 fi
 echo "✓ No networking symbols"
 
-echo "▸ Privacy check: the network is reached only by the updater"
-ELSEWHERE="$(grep -rlE '/usr/bin/curl|URLSession|NWConnection|CFSocket' Sources Helper | grep -v '^Sources/Perch/Updater.swift$' || true)"
+echo "▸ Privacy check: the network is reached only through Network.swift"
+ELSEWHERE="$(grep -rlE '/usr/bin/curl|URLSession|NWConnection|CFSocket' Sources Helper | grep -v '^Sources/Perch/Network.swift$' || true)"
 if [ -n "$ELSEWHERE" ]; then
-    echo "✗ Network access outside Sources/Perch/Updater.swift:"
+    echo "✗ Network access outside Sources/Perch/Network.swift:"
     echo "$ELSEWHERE"
     exit 1
 fi
-echo "✓ Only Sources/Perch/Updater.swift talks to the network (github.com, when the user allows it)"
+HOSTS="$(sed -n 's/.*allowedHosts: Set<String> = \[\(.*\)\].*/\1/p' Sources/Perch/Network.swift)"
+echo "✓ Only Sources/Perch/Network.swift talks to the network, to: $HOSTS"

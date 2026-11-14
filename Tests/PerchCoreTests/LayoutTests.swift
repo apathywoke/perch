@@ -106,6 +106,13 @@ struct LayoutTests {
         #expect(size == CGSize(width: 290, height: 32))
     }
 
+    @Test func lyricsMakeTheOpenPlayerTaller() {
+        let size = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: true, active: true, scale: 1, lyrics: true)
+        #expect(size == CGSize(width: 368, height: 178 + 172))
+        let collapsed = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: true, active: true, scale: 1, lyrics: true)
+        #expect(collapsed == CGSize(width: 293, height: 38))
+    }
+
     @Test func expandedPlayerAddsARowForAnIndicator() {
         let size = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: true, active: true, scale: 1, hud: .below)
         #expect(size == CGSize(width: 368, height: 178 + 34))

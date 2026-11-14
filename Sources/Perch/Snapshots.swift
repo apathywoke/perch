@@ -1,4 +1,5 @@
 import AppKit
+import PerchCore
 import SwiftUI
 
 /// Developer tool: `Perch --snapshot-settings <folder>` draws every Settings pane
@@ -7,6 +8,9 @@ import SwiftUI
 enum Snapshots {
     static func runIfRequested() {
         let arguments = CommandLine.arguments
+        if let index = arguments.firstIndex(of: "--snapshot-lyrics"), index + 1 < arguments.count {
+            snapshotLyrics(to: URL(fileURLWithPath: arguments[index + 1], isDirectory: true))
+        }
         guard let index = arguments.firstIndex(of: "--snapshot-settings"), index + 1 < arguments.count else { return }
         let folder = URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -37,6 +41,50 @@ enum Snapshots {
             }
         }
         UserDefaults.standard.set(previousPane, forKey: Pref.settingsPane)
+        exit(0)
+    }
+
+    /// The open island with lyrics of a made-up song, in the middle of a verse.
+    /// Run with `-lyricsEnabled YES` so the setting is on for this process only.
+    private static func snapshotLyrics(to folder: URL) {
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let app = NSApplication.shared
+        app.setActivationPolicy(.prohibited)
+        app.appearance = NSAppearance(named: .darkAqua)
+        Pref.register()
+        let media = MediaService.preview()
+        let lrc = """
+        [00:52.00]Streetlights hum a quiet tune
+        [00:56.00]Paper boats on a silver lake
+        [01:00.00]We kept the window open wide
+        [01:04.50]And let the evening in
+        [01:09.00]Every song we never wrote
+        [01:13.00]Is waiting in the rain
+        [01:17.50]
+        [01:21.00]So hold the note a little longer
+        [01:25.00]Before the morning comes
+        [01:29.00]Hold the note
+        """
+        if let track = media.track {
+            LyricsService.shared.showWithoutFetching(.synced(LRCParser.parse(lrc)), for: track)
+        }
+        let model = NotchModel()
+        model.notchSize = CGSize(width: 209, height: 38)
+        model.hasNotch = true
+        model.active = true
+        model.visible = true
+        model.phase = .expanded
+        model.showLyrics = true
+        let window = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: 560, height: 420),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.backgroundColor = NSColor(srgbRed: 0.16, green: 0.17, blue: 0.3, alpha: 1)
+        window.contentView = NSHostingView(rootView: IslandView(model: model, media: media))
+        window.orderFrontRegardless()
+        RunLoop.main.run(until: Date().addingTimeInterval(1.5))
+        if let image = capture(window) {
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
+                .write(to: folder.appendingPathComponent("lyrics.png"))
+        }
         exit(0)
     }
 

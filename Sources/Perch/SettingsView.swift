@@ -5,7 +5,7 @@ import SwiftUI
 // MARK: - Window
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, behavior, appearance, indicators, sources, shortcuts, about
+    case general, behavior, appearance, indicators, sources, lyrics, shortcuts, about
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
@@ -15,6 +15,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: "Appearance"
         case .indicators: "Volume & Brightness"
         case .sources: "Music Sources"
+        case .lyrics: "Lyrics"
         case .shortcuts: "Shortcuts"
         case .about: "About"
         }
@@ -27,6 +28,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: "Size, motion and the look of the player."
         case .indicators: "Volume and brightness in the island instead of the system indicators."
         case .sources: "Which apps the island follows."
+        case .lyrics: "Song lyrics in the island, as in Apple Music."
         case .shortcuts: "Control the music from any app."
         case .about: "A music player for the MacBook notch."
         }
@@ -39,6 +41,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: "paintbrush.pointed.fill"
         case .indicators: "speaker.wave.2.fill"
         case .sources: "music.note"
+        case .lyrics: "quote.bubble.fill"
         case .shortcuts: "command"
         case .about: "info"
         }
@@ -51,6 +54,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: .pink
         case .indicators: .orange
         case .sources: .red
+        case .lyrics: .purple
         case .shortcuts: .indigo
         case .about: .teal
         }
@@ -75,6 +79,7 @@ struct SettingsView: View {
                 }
                 Section("Music") {
                     row(.sources)
+                    row(.lyrics)
                     row(.shortcuts)
                 }
                 Section("System") { row(.indicators) }
@@ -92,6 +97,7 @@ struct SettingsView: View {
                 case .appearance: AppearancePane()
                 case .indicators: IndicatorsPane()
                 case .sources: SourcesPane()
+                case .lyrics: LyricsPane()
                 case .shortcuts: ShortcutsPane()
                 case .about: AboutPane()
                 }
@@ -119,6 +125,7 @@ private struct GeneralPane: View {
     @AppStorage(Pref.display) private var display = DisplayChoice.auto
     @AppStorage(Pref.hideInFullscreen) private var hideInFullscreen = true
     @AppStorage(Pref.showOnNonNotch) private var showOnNonNotch = true
+    @AppStorage(Pref.hideFromCapture) private var hideFromCapture = false
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     @State private var language = AppLanguage.current
@@ -149,6 +156,13 @@ private struct GeneralPane: View {
                 Text("Display")
             } footer: {
                 Text("On such displays the island appears as a tab at the top edge while music is playing.")
+            }
+            Section {
+                Toggle("Hide while the screen is recorded or shared", isOn: $hideFromCapture)
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("During a screen recording or when you share your screen in a call, the island disappears, so nobody sees what you are listening to. The volume indicator still appears.")
             }
             Section("Language") {
                 Picker("Interface language", selection: $language) {
@@ -457,6 +471,47 @@ private struct SourcesPane: View {
     }
 }
 
+// MARK: - Lyrics
+
+private struct LyricsPane: View {
+    @AppStorage(Pref.lyricsEnabled) private var enabled = false
+    @AppStorage(Pref.lyricsSize) private var size = LyricsSize.medium
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Show lyrics", isOn: $enabled)
+                    .onChange(of: enabled) { _, on in
+                        if !on { LyricsService.shared.clear() }
+                    }
+            } header: {
+                PaneHeader(pane: .lyrics)
+            } footer: {
+                Text("Lyrics come from LRCLIB, a free open lyrics database. When you open the lyrics, Perch sends the song's title, artist, album and length to lrclib.net. Nothing else is sent, and lyrics are kept only in memory.")
+            }
+            if enabled {
+                Section {
+                    TilePicker(selection: $size, options: [
+                        TileOption(value: .small, title: "Small") { sizeSample(14) },
+                        TileOption(value: .medium, title: "Medium") { sizeSample(18) },
+                        TileOption(value: .large, title: "Large") { sizeSample(22) },
+                    ])
+                } header: {
+                    Text("Text size")
+                } footer: {
+                    Text("Open the lyrics with the button on the left of the player controls. Tap a line to jump to it.")
+                }
+            }
+        }
+    }
+
+    private func sizeSample(_ points: CGFloat) -> some View {
+        Text(verbatim: "Aa")
+            .font(.system(size: points, weight: .bold))
+            .frame(height: 26)
+    }
+}
+
 // MARK: - Shortcuts
 
 private struct ShortcutsPane: View {
@@ -519,7 +574,7 @@ private struct AboutPane: View {
             Section("Privacy") {
                 PrivacyRow(symbol: "eye.slash.fill", color: .blue, text: "No telemetry, analytics or crash reporting.")
                 PrivacyRow(symbol: "wifi.slash", color: .green,
-                           text: "No network connections, except checking for updates if you turn it on.")
+                           text: "No network connections, except update checks and lyrics, if you turn them on.")
                 PrivacyRow(symbol: "lock.fill", color: .orange, text: "No Screen Recording or microphone access.")
                 PrivacyRow(symbol: "hand.raised.fill", color: .indigo,
                            text: "Accessibility is requested only for the optional volume and brightness indicators.")

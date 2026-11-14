@@ -5,10 +5,9 @@ import Security
 
 /// Updates from the project's GitHub releases.
 ///
-/// Off unless the user turns it on (or presses "Check now"). The only network
-/// traffic in Perch happens here, through the system `curl`, to github.com:
-/// one request for the latest release, and the download of the new version
-/// when the user asks to install it. Nothing about the user is sent.
+/// Off unless the user turns it on (or presses "Check now"). Through Network,
+/// it makes one request to github.com for the latest release, and downloads
+/// the new version when the user asks to install it. Nothing about the user is sent.
 ///
 /// A downloaded build is installed only if its code signature satisfies the
 /// designated requirement of the running copy, i.e. it was signed with the
@@ -124,8 +123,12 @@ final class Updater: ObservableObject {
     }
 
     private static func fetchLatest() throws -> Release {
-        let data = try curl(["--header", "Accept: application/vnd.github+json",
-                             "https://api.github.com/repos/\(repository)/releases/latest"])
+        let response = try Network.get(URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!,
+                                       headers: ["Accept": "application/vnd.github+json"])
+        guard response.status == 200 else {
+            throw response.status == 404 ? UpdateError.noRelease : UpdateError.toolFailed("HTTP \(response.status)")
+        }
+        let data = response.data
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tag = json["tag_name"] as? String, let version = AppVersion(tag) else {
             throw UpdateError.unreadableRelease
@@ -160,7 +163,7 @@ final class Updater: ObservableObject {
                 defer { try? FileManager.default.removeItem(at: folder) }
 
                 let zip = folder.appendingPathComponent("Perch.zip")
-                _ = try Self.curl(["--max-filesize", "200000000", "--output", zip.path, archive.absoluteString])
+                try Network.download(archive, to: zip, maxBytes: 200_000_000)
                 let unpacked = folder.appendingPathComponent("unpacked", isDirectory: true)
                 try Self.run("/usr/bin/ditto", ["-x", "-k", zip.path, unpacked.path])
                 let app = unpacked.appendingPathComponent("Perch.app", isDirectory: true)
@@ -210,15 +213,6 @@ final class Updater: ObservableObject {
 
     // MARK: Processes
 
-    /// HTTPS only, follows GitHub's redirects to its download servers, no cookies or config files.
-    @discardableResult
-    private static func curl(_ arguments: [String]) throws -> Data {
-        // --disable must come first: it stops curl from reading a user's ~/.curlrc.
-        try run("/usr/bin/curl", ["--disable", "--silent", "--show-error", "--fail", "--location",
-                                  "--proto", "=https", "--proto-redir", "=https", "--max-time", "120",
-                                  "--user-agent", "Perch-Updater"] + arguments)
-    }
-
     @discardableResult
     private static func run(_ tool: String, _ arguments: [String]) throws -> Data {
         let process = Process()
@@ -260,12 +254,13 @@ final class Updater: ObservableObject {
 }
 
 enum UpdateError: LocalizedError {
-    case unreadableRelease, notPerch, notNewer, untrusted
+    case unreadableRelease, noRelease, notPerch, notNewer, untrusted
     case toolFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .unreadableRelease: NSLocalizedString("GitHub answered, but the release could not be read.", comment: "")
+        case .noRelease: NSLocalizedString("No releases have been published yet.", comment: "")
         case .notPerch: NSLocalizedString("The download is not Perch.", comment: "")
         case .notNewer: NSLocalizedString("The download is not newer than this version.", comment: "")
         case .untrusted: NSLocalizedString("The download is not signed like this copy of Perch, so it was not installed.", comment: "")

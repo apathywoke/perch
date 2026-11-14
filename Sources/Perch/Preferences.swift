@@ -9,6 +9,7 @@ enum Pref {
     static let display = "display"
     static let hideInFullscreen = "hideInFullscreen"
     static let showOnNonNotch = "showOnNonNotch"
+    static let hideFromCapture = "hideFromCapture"
     // Behaviour
     static let openTrigger = "openTrigger"
     static let hoverDelay = "hoverDelay"
@@ -47,6 +48,10 @@ enum Pref {
     static let onboardingDone = "onboardingDone"
     // Settings window
     static let settingsPane = "settingsPane"
+    // Lyrics (off unless the user turns them on)
+    static let lyricsEnabled = "lyricsEnabled"
+    static let lyricsOpen = "lyricsOpen"
+    static let lyricsSize = "lyricsSize"
     // Updates (off unless the user turns them on)
     static let updateChecks = "updateChecks"
     static let lastUpdateCheck = "lastUpdateCheck"
@@ -58,6 +63,7 @@ enum Pref {
         display: DisplayChoice.auto.rawValue,
         hideInFullscreen: true,
         showOnNonNotch: true,
+        hideFromCapture: false,
         openTrigger: OpenTrigger.hover.rawValue,
         hoverDelay: 0.35,
         closeDelay: 0.25,
@@ -86,6 +92,9 @@ enum Pref {
         hudDuration: 1.6,
         fallbackSources: true,
         updateChecks: false,
+        lyricsEnabled: false,
+        lyricsOpen: false,
+        lyricsSize: LyricsSize.medium.rawValue,
     ]
 
     private static var store: UserDefaults { .standard }
@@ -187,6 +196,25 @@ enum VisualizerColor: String, CaseIterable, Identifiable {
         case .artwork: "From the artwork"
         case .white: "White"
         case .accent: "System accent"
+        }
+    }
+}
+
+enum LyricsSize: String, CaseIterable, Identifiable {
+    case small, medium, large
+    var id: String { rawValue }
+    var title: LocalizedStringKey {
+        switch self {
+        case .small: "Small"
+        case .medium: "Medium"
+        case .large: "Large"
+        }
+    }
+    var points: CGFloat {
+        switch self {
+        case .small: 16
+        case .medium: 19
+        case .large: 23
         }
     }
 }
