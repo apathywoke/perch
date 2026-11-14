@@ -107,10 +107,18 @@ struct LayoutTests {
     }
 
     @Test func lyricsMakeTheOpenPlayerTaller() {
-        let size = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: true, active: true, scale: 1, lyrics: true)
+        let size = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: true, active: true, scale: 1, lyricsHeight: 172)
         #expect(size == CGSize(width: 368, height: 178 + 172))
-        let collapsed = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: true, active: true, scale: 1, lyrics: true)
+        let collapsed = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: true, active: true, scale: 1,
+                                         lyricsHeight: 172)
         #expect(collapsed == CGSize(width: 293, height: 38))
+    }
+
+    @Test func lyricsRoomFollowsLinesAndFont() {
+        #expect(NotchLayout.lyricsHeight(lines: 5, fontSize: 19) == 186)
+        #expect(NotchLayout.lyricsHeight(lines: 3, fontSize: 19) < NotchLayout.lyricsHeight(lines: 8, fontSize: 19))
+        #expect(NotchLayout.lyricsHeight(lines: 5, fontSize: 23) > NotchLayout.lyricsHeight(lines: 5, fontSize: 19))
+        #expect(NotchLayout.lyricsHeight(lines: 0, fontSize: 19) == NotchLayout.lyricsHeight(lines: 1, fontSize: 19))
     }
 
     @Test func expandedPlayerAddsARowForAnIndicator() {

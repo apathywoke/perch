@@ -53,6 +53,7 @@ enum Pref {
     static let lyricsOpen = "lyricsOpen"
     static let lyricsSize = "lyricsSize"
     static let lyricsWordByWord = "lyricsWordByWord"
+    static let lyricsSpace = "lyricsSpace"
     // Updates (off unless the user turns them on)
     static let updateChecks = "updateChecks"
     static let lastUpdateCheck = "lastUpdateCheck"
@@ -97,6 +98,7 @@ enum Pref {
         lyricsOpen: false,
         lyricsSize: LyricsSize.medium.rawValue,
         lyricsWordByWord: true,
+        lyricsSpace: LyricsSpace.medium.rawValue,
     ]
 
     private static var store: UserDefaults { .standard }
@@ -218,6 +220,34 @@ enum LyricsSize: String, CaseIterable, Identifiable {
         case .medium: 19
         case .large: 23
         }
+    }
+}
+
+/// How much of the lyrics the open player shows at once.
+enum LyricsSpace: String, CaseIterable, Identifiable {
+    case few, medium, many
+    var id: String { rawValue }
+    var title: LocalizedStringKey {
+        switch self {
+        case .few: "Few lines"
+        case .medium: "Medium"
+        case .many: "Many lines"
+        }
+    }
+    var lines: Int {
+        switch self {
+        case .few: 3
+        case .medium: 5
+        case .many: 8
+        }
+    }
+
+    /// Height under the controls for the current settings, 0 when lyrics are closed or off.
+    static func currentHeight(scale: CGFloat) -> CGFloat {
+        guard Pref.bool(Pref.lyricsEnabled), NotchController.shared.model.showLyrics else { return 0 }
+        let space = Pref.value(Pref.lyricsSpace, LyricsSpace.medium)
+        let size = Pref.value(Pref.lyricsSize, LyricsSize.medium)
+        return NotchLayout.lyricsHeight(lines: space.lines, fontSize: size.points * scale)
     }
 }
 

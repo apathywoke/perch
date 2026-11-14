@@ -75,7 +75,7 @@ enum Snapshots {
         model.visible = true
         model.phase = .expanded
         model.showLyrics = true
-        let window = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: 560, height: 420),
+        let window = NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: 560, height: 560),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.backgroundColor = NSColor(srgbRed: 0.16, green: 0.17, blue: 0.3, alpha: 1)
         window.contentView = NSHostingView(rootView: IslandView(model: model, media: media))

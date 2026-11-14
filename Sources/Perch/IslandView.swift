@@ -39,11 +39,14 @@ struct IslandView: View {
     @AppStorage(Pref.swapSides) private var swapSides = false
     @AppStorage(Pref.visualizer) private var visualizer = true
     @AppStorage(Pref.lyricsEnabled) private var lyricsEnabled = false
+    @AppStorage(Pref.lyricsSpace) private var lyricsSpace = LyricsSpace.medium
+    @AppStorage(Pref.lyricsSize) private var lyricsSize = LyricsSize.medium
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let s = scale
         let lyrics = model.showLyrics && lyricsEnabled
+        let lyricsHeight = lyrics ? NotchLayout.lyricsHeight(lines: lyricsSpace.lines, fontSize: lyricsSize.points * s) : 0
         let notch = model.notchSize
         let expanded = model.phase == .expanded
         let hud = expanded ? nil : model.hud
@@ -51,7 +54,8 @@ struct IslandView: View {
         let tall = hud != nil && model.hasNotch && hudStyle == .below
         let swell = model.hovering && !reduceMotion && model.phase == .collapsed && hud == nil
         let size = NotchLayout.size(phase: model.phase, notch: notch, hasNotch: model.hasNotch, active: model.active,
-                                    scale: s, hud: model.hud == nil ? nil : hudStyle, swell: swell, lyrics: lyrics)
+                                    scale: s, hud: model.hud == nil ? nil : hudStyle, swell: swell,
+                                    lyricsHeight: lyricsHeight)
         let player = NotchLayout.player(notch: notch, hasNotch: model.hasNotch, scale: s)
         let collapsed = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: model.hasNotch,
                                          active: model.active, scale: s)
@@ -102,7 +106,7 @@ struct IslandView: View {
 
                 if expanded, lyrics, let track = media.track {
                     LyricsPanel(track: track, scale: s) { media.seek(to: $0) }
-                        .frame(width: player.width - 2 * player.inset, height: player.lyricsHeight)
+                        .frame(width: player.width - 2 * player.inset, height: lyricsHeight)
                         .offset(y: player.height - 12 * s)
                         .transition(contentTransition(from: 0.96))
                 }
@@ -111,7 +115,7 @@ struct IslandView: View {
                 if expanded, let state = model.hud {
                     HUDView(state: state, layout: .plain(height: player.hudRow), tint: media.tint)
                         .frame(width: player.width, height: player.hudRow)
-                        .offset(y: player.height + (lyrics ? player.lyricsHeight : 0) - 10 * s)
+                        .offset(y: player.height + lyricsHeight - 10 * s)
                         .transition(contentTransition(from: 0.9))
                 }
 

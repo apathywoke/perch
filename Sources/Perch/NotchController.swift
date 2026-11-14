@@ -62,7 +62,7 @@ final class NotchController {
     private var swipeAccumulated: CGFloat = 0
     private var swipeFired = false
 
-    private static let panelSize = CGSize(width: 800, height: 560)
+    private static let panelSize = CGSize(width: 800, height: 720)
 
     // MARK: Setup
 
@@ -388,7 +388,7 @@ final class NotchController {
                                     active: model.active, scale: Pref.double(Pref.scale),
                                     hud: model.hud == nil ? nil : Pref.value(Pref.hudStyle, HUDStyle.beside),
                                     swell: model.hovering && !Motion.reduced,
-                                    lyrics: model.showLyrics && Pref.bool(Pref.lyricsEnabled))
+                                    lyricsHeight: LyricsSpace.currentHeight(scale: Pref.double(Pref.scale)))
         let pad: CGFloat = model.phase == .expanded ? 12 : 0
         return CGRect(x: screen.frame.midX - size.width / 2 - pad, y: screen.frame.maxY - size.height - pad,
                       width: size.width + pad * 2, height: size.height + pad + 2)

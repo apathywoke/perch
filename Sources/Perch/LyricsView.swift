@@ -107,50 +107,55 @@ private struct SyncedLyricsView: View {
     let wordByWord: Bool
     let seek: (Double) -> Void
     @StateObject private var clock = LyricsClock()
+    @State private var heights: [Int: CGFloat] = [:]
+    @State private var ready = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Where the current line rests: a little above the middle, as in Apple Music.
-    private let anchor = UnitPoint(x: 0.5, y: 0.3)
+    private let anchor: CGFloat = 0.3
 
     var body: some View {
+        let spacing = fontSize * 0.6
         GeometryReader { geometry in
-            ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: fontSize * 0.6) {
-                        Color.clear.frame(height: geometry.size.height * anchor.y)
-                        ForEach(lines) { line in
-                            let distance = clock.current.map { line.id - $0 } ?? line.id + 1
-                            Group {
-                                if distance == 0, wordByWord, !line.words.isEmpty {
-                                    ActiveLyricLine(line: line, track: track, fontSize: fontSize, reduceMotion: reduceMotion)
-                                } else {
-                                    LyricLineView(line: line, distance: distance, fontSize: fontSize, reduceMotion: reduceMotion)
-                                }
+            let focus = clock.current ?? 0
+            let top = lines.prefix(focus).reduce(CGFloat(0)) { $0 + (heights[$1.id] ?? fontSize * 1.25) + spacing }
+            let offset = (geometry.size.height * anchor - top).rounded()
+            VStack(alignment: .leading, spacing: spacing) {
+                ForEach(lines) { line in
+                    let distance = clock.current.map { line.id - $0 } ?? line.id + 1
+                    LyricLineView(line: line, distance: distance, track: track, fontSize: fontSize,
+                                  wordByWord: wordByWord, reduceMotion: reduceMotion)
+                        .background {
+                            GeometryReader { proxy in
+                                Color.clear.preference(key: LineHeights.self, value: [line.id: proxy.size.height])
                             }
-                            .id(line.id)
-                            .onTapGesture { seek(line.time) }
                         }
-                        Text("Lyrics from LRCLIB")
-                            .font(.system(size: 10 * scale, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.3))
-                            .padding(.top, 8 * scale)
-                        Color.clear.frame(height: geometry.size.height * (1 - anchor.y))
-                    }
+                        .offset(y: offset)
+                        .animation(ready ? scroll(for: distance) : nil, value: offset)
+                        .onTapGesture { seek(line.time) }
                 }
-                .onAppear {
-                    clock.follow(lines, track)
-                    proxy.scrollTo(clock.current ?? 0, anchor: anchor)
-                }
-                .onChange(of: track) { _, new in clock.follow(lines, new) }
-                .onChange(of: lines) { _, new in clock.follow(new, track) }
-                .onChange(of: clock.current) { _, new in
-                    withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.6, dampingFraction: 0.88)) {
-                        proxy.scrollTo(new ?? 0, anchor: anchor)
-                    }
-                }
-                .onDisappear { clock.stop() }
+                Text("Lyrics from LRCLIB")
+                    .font(.system(size: 10 * scale, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.3))
+                    .offset(y: offset)
+                    .animation(ready ? scroll(for: 8) : nil, value: offset)
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .clipped()
         }
+        .onPreferenceChange(LineHeights.self) { measured in
+            heights = measured
+            // Only animate once every line has its real height, so opening does not scroll.
+            if !ready { DispatchQueue.main.async { ready = true } }
+        }
+        .onAppear { clock.follow(lines, track) }
+        .onChange(of: track) { _, new in clock.follow(lines, new) }
+        .onChange(of: lines) { _, new in
+            ready = false
+            clock.follow(new, track)
+        }
+        .onDisappear { clock.stop() }
         .mask {
             LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.16),
                                    .init(color: .black, location: 0.82), .init(color: .clear, location: 1)],
@@ -159,61 +164,68 @@ private struct SyncedLyricsView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Lyrics"))
     }
+
+    /// The list moves like a wave rather than a block: the line now being sung
+    /// leads, and each line below follows a beat later.
+    private func scroll(for distance: Int) -> Animation {
+        if reduceMotion { return .easeInOut(duration: 0.25) }
+        let delay = Double(min(max(distance, 0), 8)) * 0.035
+        return .spring(response: 0.55, dampingFraction: 0.86).delay(delay)
+    }
 }
 
-/// A line that is not being sung (or word-by-word highlighting is off).
+private struct LineHeights: PreferenceKey {
+    static let defaultValue: [Int: CGFloat] = [:]
+    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
+/// One line of lyrics. The same view in every state, so moving between
+/// "to come", "being sung" and "sung" is animated rather than swapped.
 private struct LyricLineView: View {
     let line: LyricLine
     /// 0 for the line being sung, negative for past lines, positive for those to come.
     let distance: Int
+    let track: Track
     let fontSize: CGFloat
+    let wordByWord: Bool
     let reduceMotion: Bool
 
     var body: some View {
         let current = distance == 0
-        WordFlow(spacing: fontSize * 0.28, lineSpacing: fontSize * 0.12) {
-            ForEach(Array(words.enumerated()), id: \.offset) { _, word in
-                Text(verbatim: word).font(.system(size: fontSize, weight: .bold))
+        let near = abs(distance) <= 6
+        // Only the line being sung redraws with the display, at most 30 times a second.
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !(current && wordByWord && track.isPlaying))) { _ in
+            // The real clock, not the timeline's date, which can lie ahead of it.
+            let position = current ? track.position(at: Date()) + LyricsClock.lead : 0
+            WordFlow(spacing: fontSize * 0.28, lineSpacing: fontSize * 0.12) {
+                ForEach(Array(words.enumerated()), id: \.offset) { _, word in
+                    KaraokeWord(text: word.text, fill: fill(for: word, at: position), lit: current,
+                                layered: abs(distance) <= 1, glow: current && wordByWord,
+                                fontSize: fontSize, reduceMotion: reduceMotion)
+                }
             }
         }
-        .foregroundStyle(.white.opacity(current ? 1 : (distance < 0 ? 0.26 : 0.4)))
-        .blur(radius: reduceMotion || current ? 0 : min(2.2, 0.75 * CGFloat(abs(distance))))
+        .opacity(near ? (distance < 0 ? 0.65 : 1) : 0)
+        .blur(radius: reduceMotion || current || !near ? 0 : min(2.2, 0.75 * CGFloat(abs(distance))))
         .scaleEffect(current || reduceMotion ? 1 : 0.97, anchor: .leading)
+        .animation(.easeOut(duration: 0.45), value: distance)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .animation(.easeOut(duration: 0.4), value: distance)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: line.text.isEmpty ? "…" : line.text))
         .accessibilityAddTraits(current ? .isSelected : [])
     }
 
-    private var words: [String] { line.words.isEmpty ? [line.text] : line.words.map(\.text) }
-}
+    private var words: [LyricWord] {
+        line.words.isEmpty ? [LyricWord(text: line.text, start: line.time, end: line.time)] : line.words
+    }
 
-/// The line being sung, lit up word by word. Only this line redraws with the
-/// display while it is on screen, at most 30 times a second.
-private struct ActiveLyricLine: View {
-    let line: LyricLine
-    let track: Track
-    let fontSize: CGFloat
-    let reduceMotion: Bool
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !track.isPlaying)) { _ in
-            // The real clock, not the timeline's date, which can lie ahead of it.
-            let position = track.position(at: Date()) + LyricsClock.lead
-            WordFlow(spacing: fontSize * 0.28, lineSpacing: fontSize * 0.12) {
-                ForEach(Array(line.words.enumerated()), id: \.offset) { _, word in
-                    KaraokeWord(text: word.text, progress: word.progress(at: position),
-                                fontSize: fontSize, reduceMotion: reduceMotion)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: line.text.isEmpty ? "…" : line.text))
-        .accessibilityAddTraits(.isSelected)
+    private func fill(for word: LyricWord, at position: Double) -> Double {
+        if distance < 0 { return 1 } // sung; the light fades out with the line
+        if distance > 0 { return 0 }
+        return wordByWord ? word.progress(at: position) : 1
     }
 }
 
@@ -221,24 +233,32 @@ private struct ActiveLyricLine: View {
 /// through a soft edge, lifting a touch and glowing while it is being sung.
 private struct KaraokeWord: View {
     let text: String
-    let progress: Double
+    let fill: Double
+    /// The light layer is showing (the line is being sung); it fades in and out.
+    let lit: Bool
+    /// Draw the light layer at all: only for the lines around the current one.
+    let layered: Bool
+    let glow: Bool
     let fontSize: CGFloat
     let reduceMotion: Bool
 
     var body: some View {
         // With "Reduce motion", a word simply lights up when its turn comes.
-        let fill = reduceMotion ? (progress > 0 ? 1 : 0) : progress
-        let singing = fill > 0 && fill < 1
+        let amount = reduceMotion ? (fill > 0 ? 1 : 0) : fill
+        let singing = glow && amount > 0 && amount < 1 && !reduceMotion
         let label = Text(verbatim: text).font(.system(size: fontSize, weight: .bold))
         label
             .foregroundStyle(.white.opacity(0.4))
             .overlay {
-                label
-                    .foregroundStyle(.white)
-                    .mask { FillMask(progress: fill) }
+                if layered {
+                    label
+                        .foregroundStyle(.white)
+                        .mask { FillMask(progress: amount) }
+                        .opacity(lit ? 1 : 0)
+                }
             }
-            .shadow(color: .white.opacity(singing && !reduceMotion ? 0.35 : 0), radius: fontSize * 0.3)
-            .offset(y: reduceMotion ? 0 : -fontSize * 0.06 * sin(.pi * fill))
+            .shadow(color: .white.opacity(singing ? 0.35 : 0), radius: fontSize * 0.3)
+            .offset(y: singing ? -fontSize * 0.06 * sin(.pi * amount) : 0)
     }
 }
 

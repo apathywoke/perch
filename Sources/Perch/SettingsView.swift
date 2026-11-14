@@ -477,6 +477,7 @@ private struct LyricsPane: View {
     @AppStorage(Pref.lyricsEnabled) private var enabled = false
     @AppStorage(Pref.lyricsSize) private var size = LyricsSize.medium
     @AppStorage(Pref.lyricsWordByWord) private var wordByWord = true
+    @AppStorage(Pref.lyricsSpace) private var space = LyricsSpace.medium
 
     var body: some View {
         Form {
@@ -497,6 +498,15 @@ private struct LyricsPane: View {
                     Text("Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise.")
                 }
                 Section {
+                    TilePicker(selection: $space, options: LyricsSpace.allCases.map { option in
+                        TileOption(value: option, title: option.title) { linesSample(option.lines) }
+                    })
+                } header: {
+                    Text("Amount of text")
+                } footer: {
+                    Text("How many lines of lyrics the open player shows at once.")
+                }
+                Section {
                     TilePicker(selection: $size, options: [
                         TileOption(value: .small, title: "Small") { sizeSample(14) },
                         TileOption(value: .medium, title: "Medium") { sizeSample(18) },
@@ -509,6 +519,18 @@ private struct LyricsPane: View {
                 }
             }
         }
+    }
+
+    /// A little stack of bars, one per visible line; the middle one lit like the line being sung.
+    private func linesSample(_ count: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2.5) {
+            ForEach(0..<count, id: \.self) { index in
+                Capsule()
+                    .fill(index == count / 2 ? Color.primary : Color.primary.opacity(0.3))
+                    .frame(width: index.isMultiple(of: 2) ? 34 : 26, height: 3)
+            }
+        }
+        .frame(height: 40)
     }
 
     private func sizeSample(_ points: CGFloat) -> some View {
