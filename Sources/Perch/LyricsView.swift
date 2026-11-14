@@ -60,9 +60,12 @@ struct LyricsPanel: View {
 /// starts, worked out from the real clock, so the highlight neither runs
 /// ahead nor lags behind the song.
 final class LyricsClock: ObservableObject {
-    /// Absorbs rounding right at a line's start, plus the user's timing
-    /// correction (positive delays the lyrics).
-    static var lead: Double { 0.02 - Pref.double(Pref.lyricsDelay) }
+    /// What to add to the reported position: a hair for rounding at a line's
+    /// start, minus the player's own lead over the audio and the user's
+    /// timing correction (positive delays the lyrics).
+    static func shift(for track: Track) -> Double {
+        0.02 - PlayerLatency.seconds(for: track.bundleId) - Pref.double(Pref.lyricsDelay)
+    }
 
     @Published private(set) var current: Int?
     private var lines: [LyricLine] = []
@@ -83,7 +86,7 @@ final class LyricsClock: ObservableObject {
     private func tick() {
         stop()
         guard let track else { return }
-        let position = track.position(at: Date()) + Self.lead
+        let position = track.position(at: Date()) + Self.shift(for: track)
         let index = LyricsTiming.currentIndex(in: lines, at: position)
         if index != current { current = index }
         guard track.isPlaying, let next = lines.first(where: { $0.time > position }) else { return }
@@ -220,7 +223,7 @@ private struct LyricLineView: View {
         // Only the line being sung redraws with the display, at most 30 times a second.
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !(current && wordByWord && track.isPlaying))) { _ in
             // The real clock, not the timeline's date, which can lie ahead of it.
-            let position = current ? track.position(at: Date()) + LyricsClock.lead : 0
+            let position = current ? track.position(at: Date()) + LyricsClock.shift(for: track) : 0
             WordFlow(spacing: fontSize * 0.28, lineSpacing: fontSize * 0.12) {
                 ForEach(Array(words.enumerated()), id: \.offset) { _, word in
                     KaraokeWord(text: word.text, fill: fill(for: word, at: position), lit: current,

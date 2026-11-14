@@ -316,3 +316,17 @@ public enum LRCLIB {
         }?.lyrics
     }
 }
+
+// MARK: - Player latency
+
+/// How far a player's reported position runs ahead of what is actually heard.
+public enum PlayerLatency {
+    /// Spotify reports a new position as soon as it decides to play, before the
+    /// audio starts. Measured against the position Spotify itself gives when
+    /// pausing: Perch ran 0.22–0.37 s ahead, 0.31 s on average.
+    public static let spotify = 0.3
+
+    public static func seconds(for bundleId: String?) -> Double {
+        bundleId == FallbackPlayer.spotify.rawValue ? spotify : 0
+    }
+}
