@@ -69,7 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.title = NSLocalizedString("Perch Settings", comment: "")
+            window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
+            window.toolbarStyle = .unified
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window

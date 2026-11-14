@@ -5,6 +5,8 @@ import AppKit
 // terminate Perch.
 signal(SIGPIPE, SIG_IGN)
 
+Snapshots.runIfRequested()
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

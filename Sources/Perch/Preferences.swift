@@ -45,6 +45,8 @@ enum Pref {
     static let fallbackSources = "fallbackSources"
     // First launch
     static let onboardingDone = "onboardingDone"
+    // Settings window
+    static let settingsPane = "settingsPane"
     // Shortcuts
     static let hotkeys = "hotkeys"
 

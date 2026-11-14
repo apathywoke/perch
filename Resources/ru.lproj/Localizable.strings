@@ -193,3 +193,24 @@
 "Audio output" = "Вывод звука";
 "No output devices" = "Нет устройств вывода";
 "Switch between remaining and total time" = "Переключить оставшееся и общее время";
+
+/* Settings window */
+"Island" = "Остров";
+"Music" = "Музыка";
+"System" = "Система";
+"Startup, menu bar and where the island appears." = "Запуск, строка меню и экран для острова.";
+"How the island opens, closes and reacts to you." = "Как остров открывается, закрывается и откликается.";
+"Size, motion and the look of the player." = "Размер, движение и вид плеера.";
+"Volume and brightness in the island instead of the system indicators." = "Громкость и яркость в острове вместо системных индикаторов.";
+"Which apps the island follows." = "За какими приложениями следит остров.";
+"Control the music from any app." = "Управление музыкой из любого приложения.";
+"Changes show up here straight away." = "Изменения сразу видны здесь.";
+"Motion" = "Движение";
+"Collapsed" = "Свёрнут";
+"Open" = "Открыт";
+"Track card" = "Новый трек";
+"Indicator" = "Индикатор";
+"Island preview" = "Предпросмотр острова";
+"Song title" = "Название песни";
+"Artist" = "Исполнитель";
+"Version %@" = "Версия %@";

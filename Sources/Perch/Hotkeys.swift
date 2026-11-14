@@ -19,6 +19,14 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
         case .toggleIsland: "Open or close the island"
         }
     }
+    var symbol: String {
+        switch self {
+        case .playPause: "playpause.fill"
+        case .next: "forward.fill"
+        case .previous: "backward.fill"
+        case .toggleIsland: "capsule.fill"
+        }
+    }
 }
 
 /// Global shortcuts through the Carbon hot key API. Unlike event taps it needs

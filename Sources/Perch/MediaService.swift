@@ -358,6 +358,45 @@ final class MediaService: ObservableObject {
         Pref.set(knownSources, Pref.knownSources)
     }
 
+    // MARK: Preview
+
+    /// A service that never starts the helper and shows a sample song, for the
+    /// island preview in Settings when nothing is playing.
+    static func preview() -> MediaService {
+        let service = MediaService()
+        service.track = Track(title: NSLocalizedString("Song title", comment: "preview"),
+                              artist: NSLocalizedString("Artist", comment: "preview"),
+                              duration: 214, elapsed: 71, timestamp: Date(), isPlaying: true)
+        service.artwork = previewArtwork()
+        service.artworkKey = "preview"
+        service.tint = Color(nsColor: NSColor(srgbRed: 0.66, green: 0.52, blue: 1, alpha: 1))
+        service.source = .system
+        service.sourceIcon = icon(for: FallbackPlayer.music.rawValue)
+        service.sourceName = service.sourceIcon == nil ? nil : name(for: FallbackPlayer.music.rawValue)
+        return service
+    }
+
+    private static func previewArtwork() -> NSImage {
+        NSImage(size: NSSize(width: 160, height: 160), flipped: false) { rect in
+            NSGradient(colors: [NSColor(srgbRed: 0.98, green: 0.45, blue: 0.62, alpha: 1),
+                                NSColor(srgbRed: 0.42, green: 0.36, blue: 0.98, alpha: 1)])?
+                .draw(in: rect, angle: -45)
+            let config = NSImage.SymbolConfiguration(pointSize: 64, weight: .semibold)
+            if let note = NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?
+                .withSymbolConfiguration(config) {
+                let tinted = NSImage(size: note.size, flipped: false) { noteRect in
+                    note.draw(in: noteRect)
+                    NSColor.white.withAlphaComponent(0.92).set()
+                    noteRect.fill(using: .sourceAtop)
+                    return true
+                }
+                tinted.draw(in: NSRect(x: (rect.width - note.size.width) / 2, y: (rect.height - note.size.height) / 2,
+                                       width: note.size.width, height: note.size.height))
+            }
+            return true
+        }
+    }
+
     static func icon(for bundleId: String) -> NSImage? {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
             .map { NSWorkspace.shared.icon(forFile: $0.path) }
