@@ -253,7 +253,11 @@ final class SongListener: ObservableObject {
 
     private func retimeNow() {
         guard let song else { return }
-        let lines = LyricsService.shared.retime(transcript.words, for: song)
+        // While the song plays, the line being sung keeps its timing; it only
+        // changes the next time the song comes round.
+        let playing = MediaService.shared.track.flatMap { $0.id == song && $0.isPlaying ? $0 : nil }
+        let position = playing.map { $0.position() + LyricsClock.shift(for: $0) }
+        let lines = LyricsService.shared.retime(transcript.words, for: song, keepingThrough: position)
         heardWords = transcript.words.count
         if let lines {
             timedWords = lines.map(\.heard).reduce(0, +)

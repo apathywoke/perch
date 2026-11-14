@@ -79,11 +79,21 @@ final class LyricsService: ObservableObject {
         id == currentId ? base : nil
     }
 
-    /// Times the lyrics of the song on show by the words heard in it.
+    /// Times the lyrics of the song on show by the words heard in it. Lines up
+    /// to `position` are kept as shown, so the line being sung never jumps.
     @discardableResult
-    func retime(_ heard: [HeardWord], for id: String) -> [LyricLine]? {
+    func retime(_ heard: [HeardWord], for id: String, keepingThrough position: Double? = nil) -> [LyricLine]? {
         guard id == currentId, let base else { return nil }
-        let lines = heard.isEmpty ? base : WordAlignment.align(base, heard: heard)
+        var lines = heard.isEmpty ? base : WordAlignment.align(base, heard: heard)
+        if let position, case .loaded(.synced(let shown)) = state, shown.count == lines.count,
+           let current = LyricsTiming.currentIndex(in: shown, at: position) {
+            lines.replaceSubrange(0...current, with: shown[0...current])
+            if current + 1 < lines.count, lines[current + 1].time <= lines[current].time {
+                let next = lines[current + 1]
+                lines[current + 1] = LyricLine(id: next.id, time: lines[current].time + 0.01, text: next.text,
+                                               words: next.words, wordSynced: next.wordSynced, heard: next.heard)
+            }
+        }
         if state != .loaded(.synced(lines)) { state = .loaded(.synced(lines)) }
         return lines
     }

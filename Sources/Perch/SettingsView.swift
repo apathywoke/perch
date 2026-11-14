@@ -688,7 +688,7 @@ private struct AboutPane: View {
                 PrivacyRow(symbol: "hand.raised.fill", color: .indigo,
                            text: "Accessibility is requested only for the optional volume and brightness indicators.")
                 PrivacyRow(symbol: "music.note", color: .red,
-                           text: "Control of Spotify or Music is requested only when the backup source is in use.")
+                           text: "Control of Spotify or Music is requested only for the backup source and, with lyrics open, to read Spotify's exact position.")
                 PrivacyRow(symbol: "chevron.left.forwardslash.chevron.right", color: .gray,
                            text: "Open source under the GNU GPL v3 licence.")
             }

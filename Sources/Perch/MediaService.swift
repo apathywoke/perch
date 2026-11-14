@@ -49,6 +49,7 @@ final class MediaService: ObservableObject {
     private var artworkTracker = ArtworkTracker()
     private var artworkCache: [String: (image: NSImage, tint: Color)] = [:]
     private var artworkRequested: String?
+    private let spotifyClock = SpotifyClock()
 
     // MARK: Lifecycle
 
@@ -67,6 +68,26 @@ final class MediaService: ObservableObject {
             }
         }
         startHelper()
+        spotifyClock.onPosition = { [weak self] seconds, at, title in
+            self?.correctPosition(to: seconds, at: at, title: title)
+        }
+        spotifyClock.start()
+    }
+
+    /// Spotify's own, exact position (see SpotifyClock) replaces the extrapolated one.
+    private func correctPosition(to seconds: Double, at moment: Date, title: String) {
+        guard var current = systemTrack, current.title == title, current.isPlaying,
+              current.bundleId == FallbackPlayer.spotify.rawValue else { return }
+        let error = current.position(at: moment) - seconds
+        guard abs(error) > 0.04 else { return }
+        if abs(error) > 0.4 {
+            Self.log.notice("Spotify position corrected by \(String(format: "%+.2f", -error), privacy: .public) s")
+        }
+        spotifyClock.noteCorrection(-error)
+        current.elapsed = seconds
+        current.timestamp = moment
+        readQueue.async { self.tracker.noteSeek(to: seconds, at: moment) }
+        applySystem(track: current, artwork: systemArtwork, tint: systemTint, key: systemArtworkKey)
     }
 
     private func startHelper() {
@@ -333,6 +354,9 @@ final class MediaService: ObservableObject {
         remember(selection.track?.bundleId)
 
         let previousApp = track?.bundleId
+        if track?.id != selection.track?.id || track?.isPlaying != selection.track?.isPlaying {
+            spotifyClock.checkSoon()
+        }
         if track != selection.track { track = selection.track }
         if source != selection.source {
             source = selection.source
@@ -423,6 +447,8 @@ final class MediaService: ObservableObject {
             ("App", track?.bundleId ?? "—"),
             ("Duration known", track.map { $0.duration > 0 ? "yes" : "no" } ?? "—"),
             ("Artwork", artwork == nil ? "no" : "yes"),
+            ("Spotify position check", spotifyClock.denied ? "not allowed"
+                : spotifyClock.lastCorrection.map { String(format: "last correction %+.2f s", $0) } ?? "no corrections yet"),
             ("Backup source", fallbackEnabled ? "on" : "off"),
             ("Backup players active", heard.isEmpty ? "—" : heard),
             ("Apps turned off", "\(ignoredSources.count)"),

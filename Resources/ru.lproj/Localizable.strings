@@ -180,7 +180,7 @@
 "Backup source in use for %@" = "Запасной источник используется для %@";
 "Backup source" = "Запасной источник";
 "Spotify and Music announce what they play to any app. Perch uses this only when the system “Now Playing” service misses the music. To control them from the island in that case, macOS asks for permission once per app." = "Spotify и «Музыка» сообщают, что играет, любому приложению. Perch использует это, только если системное «Исполняется» не видит музыку. Чтобы управлять ими из острова в этом случае, macOS один раз спросит разрешение для каждого приложения.";
-"Control of Spotify or Music is requested only when the backup source is in use." = "Доступ к управлению Spotify или «Музыкой» запрашивается, только когда работает запасной источник.";
+"Control of Spotify or Music is requested only for the backup source and, with lyrics open, to read Spotify's exact position." = "Доступ к управлению Spotify или «Музыкой» запрашивается только для запасного источника и, при открытом тексте песни, чтобы узнавать точную позицию в Spotify.";
 
 /* Diagnostics */
 "Diagnostics" = "Диагностика";
