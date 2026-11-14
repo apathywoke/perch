@@ -136,6 +136,28 @@ struct WordAlignmentTests {
         #expect(transcript.listened.isEmpty)
     }
 
+    @Test func aWordHeardInTheWrongPlaceIsIgnored() {
+        // The file is 1 s late; "friend" was misheard 2.5 s away from the rest.
+        let expected = lines[0].words.map(\.start)
+        let words = [heard("hello", expected[0] - 1), heard("darkness", expected[1] - 1),
+                     heard("my", expected[2] - 1), heard("old", expected[3] - 1),
+                     heard("friend", expected[4] + 1.5)]
+        let line = WordAlignment.align(lines, heard: words)[0]
+        #expect(line.heard == 4)
+        #expect(abs(line.words[4].start - (expected[4] - 1)) < 0.5)
+    }
+
+    @Test func farAwayLinesKeepTheFileTiming() {
+        // Heard only at the start of a long song: the end stays as the file has it.
+        let text = (0..<12).map { String(format: "[00:%02d.00]line number %d goes on and on", $0 * 4 + 10, $0) }
+        let song = LRCParser.parse(text.joined(separator: "\n"))
+        let expected = song[0].words.map(\.start)
+        let words = zip(song[0].words, expected).map { heard($0.text, $1 - 1.5) }
+        let aligned = WordAlignment.align(song, heard: words)
+        #expect(abs(aligned[1].time - (song[1].time - 1.5)) < 0.01) // a neighbour moves along
+        #expect(aligned[11] == song[11]) // forty words away does not
+    }
+
     @Test func newResultsReplaceWhatTheyCover() {
         var transcript = HeardTranscript()
         transcript.replace(from: 10, to: 12, with: [heard("hello", 10.2), heard("darknes", 11)])

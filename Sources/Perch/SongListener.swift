@@ -322,15 +322,29 @@ enum HeardStore {
         return folder.appendingPathComponent(digest + ".json")
     }
 
+    /// Raised whenever what was stored before can no longer be trusted. 2: the
+    /// first files were heard while Spotify's position could be seconds off.
+    static let version = 2
+
+    private struct Stored: Codable {
+        let version: Int
+        let transcript: HeardTranscript
+    }
+
     static func load(_ id: String) -> HeardTranscript? {
-        guard let data = try? Data(contentsOf: file(for: id)) else { return nil }
-        return try? JSONDecoder().decode(HeardTranscript.self, from: data)
+        let url = file(for: id)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let stored = try? JSONDecoder().decode(Stored.self, from: data), stored.version == version else {
+            try? FileManager.default.removeItem(at: url) // outdated: listen again
+            return nil
+        }
+        return stored.transcript
     }
 
     static func save(_ transcript: HeardTranscript, for id: String) {
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try JSONEncoder().encode(transcript).write(to: file(for: id), options: .atomic)
+            try JSONEncoder().encode(Stored(version: version, transcript: transcript)).write(to: file(for: id), options: .atomic)
         } catch {
             SongListener.log.error("Could not save heard words: \(error.localizedDescription, privacy: .public)")
         }

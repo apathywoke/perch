@@ -70,10 +70,21 @@ public struct HeardTranscript: Equatable, Codable {
 /// Fits lyric words to the words heard in the song: the ones recognised get
 /// their real timing, the ones in between are spread over the time left.
 public enum WordAlignment {
-    /// How far a heard word may be from where the lyrics expect it.
-    static let window = 3.0
-    /// Short words ("a", "I", "to") are everywhere; they must be close and exact.
-    static let shortWindow = 1.2
+    /// How far a heard word may be from where it is expected. Short words
+    /// ("a", "I", "to") are everywhere, so they must be closer, and exact.
+    struct Windows {
+        let long: Double
+        let short: Double
+        /// Before anything is known: as far as lyric files are usually off.
+        static let open = Windows(long: 3.0, short: 1.2)
+        /// Once the local offset of the file is known.
+        static let narrow = Windows(long: 1.2, short: 0.6)
+    }
+    static let window = Windows.open.long
+    /// A match this far from what its neighbours say is taken for a mistake.
+    static let outlier = 0.7
+    /// How many lyric words either side tell how far off the file is around a word.
+    static let neighbourhood = 16
 
     /// Lowercase letters and digits only, without accents or apostrophes: "Don't," → "dont".
     public static func normalize(_ text: String) -> String {
@@ -118,22 +129,24 @@ public enum WordAlignment {
     }
 
     /// How well a heard word fits a lyric word expected at `expected`; nil when it cannot be that word.
-    static func score(_ slot: Slot, expected: Double, _ heard: HeardWord, heardText: String) -> Double? {
+    static func score(_ slot: Slot, expected: Double, _ heard: HeardWord, heardText: String,
+                      windows: Windows = .open) -> Double? {
         let distance = abs(heard.start - expected)
         let short = slot.text.count <= 2 || heardText.count <= 2
         if short {
-            guard slot.text == heardText, distance <= shortWindow else { return nil }
-            return 0.6 * (1 - distance / (shortWindow * 2))
+            guard slot.text == heardText, distance <= windows.short else { return nil }
+            return 0.6 * (1 - distance / (windows.short * 2))
         }
         let similar = similarity(slot.text, heardText)
-        guard similar >= 0.67, distance <= window else { return nil }
-        return similar * (1 - distance / (window * 2))
+        guard similar >= 0.67, distance <= windows.long else { return nil }
+        return similar * (1 - distance / (windows.long * 2))
     }
 
     /// Pairs lyric words with heard words, keeping both in order and maximising
     /// how well the pairs fit. Keys are indices into `slots(lines)`; `shifts`
     /// moves where each lyric word is expected.
-    static func match(_ slots: [Slot], _ heard: [HeardWord], shifts: [Double]? = nil) -> [Int: HeardWord] {
+    static func match(_ slots: [Slot], _ heard: [HeardWord], shifts: [Double]? = nil,
+                      windows: Windows = .open) -> [Int: HeardWord] {
         let texts = heard.map { normalize($0.text) }
         let n = slots.count, m = heard.count
         guard n > 0, m > 0 else { return [:] }
@@ -144,9 +157,10 @@ public enum WordAlignment {
                 var value = max(best[i - 1][j], best[i][j - 1])
                 let expected = slots[i - 1].expected + (shifts?[i - 1] ?? 0)
                 // Only compare words that could be close in time.
-                if abs(heard[j - 1].start - expected) <= window,
+                if abs(heard[j - 1].start - expected) <= windows.long,
                    !texts[j - 1].isEmpty,
-                   let fit = score(slots[i - 1], expected: expected, heard[j - 1], heardText: texts[j - 1]) {
+                   let fit = score(slots[i - 1], expected: expected, heard[j - 1], heardText: texts[j - 1],
+                                   windows: windows) {
                     value = max(value, best[i - 1][j - 1] + fit)
                 }
                 best[i][j] = value
@@ -182,7 +196,10 @@ public enum WordAlignment {
         guard !slots.isEmpty, !sorted.isEmpty else { return lines }
         let first = match(slots, sorted)
         guard !first.isEmpty else { return lines }
-        let pairs = match(slots, sorted, shifts: shifts(slots, first))
+        var pairs = match(slots, sorted, shifts: shifts(slots, first, minimum: 1), windows: .narrow)
+        // A word recognised in the wrong place disagrees with its neighbours: drop it.
+        let local = shifts(slots, pairs, minimum: 1)
+        pairs = pairs.filter { abs($0.value.start - slots[$0.key].expected - local[$0.key]) <= outlier }
         let offsets = shifts(slots, pairs)
         var anchors: [Int: [Int: HeardWord]] = [:]
         for (index, word) in pairs {
@@ -219,17 +236,16 @@ public enum WordAlignment {
     }
 
     /// How far off the file is around each lyric word: the median of the
-    /// differences at the matched words nearby, or at the nearest one.
-    static func shifts(_ slots: [Slot], _ pairs: [Int: HeardWord]) -> [Double] {
+    /// differences at the matched words nearby. With fewer than `minimum` of
+    /// them the file is left as it is there: one stray word, or a match far
+    /// away in the song, says little about this part.
+    static func shifts(_ slots: [Slot], _ pairs: [Int: HeardWord], minimum: Int = 2) -> [Double] {
         let matched = pairs.keys.sorted()
         guard !matched.isEmpty else { return [Double](repeating: 0, count: slots.count) }
         let deltas = matched.map { pairs[$0]!.start - slots[$0].expected }
         return slots.indices.map { index in
-            var near = zip(matched, deltas).filter { abs($0.0 - index) <= 12 }.map(\.1)
-            if near.isEmpty {
-                let nearest = zip(matched, deltas).min { abs($0.0 - index) < abs($1.0 - index) }!
-                near = [nearest.1]
-            }
+            var near = zip(matched, deltas).filter { abs($0.0 - index) <= neighbourhood }.map(\.1)
+            guard near.count >= minimum else { return 0 }
             near.sort()
             let median = near.count.isMultiple(of: 2)
                 ? (near[near.count / 2 - 1] + near[near.count / 2]) / 2
