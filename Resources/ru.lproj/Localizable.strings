@@ -192,3 +192,4 @@
 /* Audio output */
 "Audio output" = "Вывод звука";
 "No output devices" = "Нет устройств вывода";
+"Switch between remaining and total time" = "Переключить оставшееся и общее время";

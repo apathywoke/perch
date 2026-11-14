@@ -15,6 +15,8 @@ final class MediaService: ObservableObject {
     @Published private(set) var track: Track?
     @Published private(set) var source: TrackSource = .none
     @Published private(set) var artwork: NSImage?
+    /// Identifies the artwork image; changes only when the picture really changes.
+    @Published private(set) var artworkKey: String?
     @Published private(set) var tint: Color = .white
     @Published private(set) var sourceIcon: NSImage?
     @Published private(set) var sourceName: String?
@@ -39,13 +41,14 @@ final class MediaService: ObservableObject {
     // Latest state from the system service (main thread).
     private var systemTrack: Track?
     private var systemArtwork: NSImage?
+    private var systemArtworkKey: String?
     private var systemTint: Color = .white
 
     // Parsing state (read queue only).
     private var tracker = PositionTracker()
-    private var lastArtworkId: String?
-    private var lastArtwork: NSImage?
-    private var lastTint: Color = .white
+    private var artworkTracker = ArtworkTracker()
+    private var artworkCache: [String: (image: NSImage, tint: Color)] = [:]
+    private var artworkRequested: String?
 
     // MARK: Lifecycle
 
@@ -139,11 +142,10 @@ final class MediaService: ObservableObject {
         readQueue.async {
             self.buffer.removeAll()
             self.tracker.reset()
-            self.lastArtworkId = nil
-            self.lastArtwork = nil
-            self.lastTint = .white
+            self.artworkTracker.reset()
+            self.artworkRequested = nil
         }
-        applySystem(track: nil, artwork: nil, tint: .white)
+        applySystem(track: nil, artwork: nil, tint: .white, key: nil)
         restarts += 1
         totalRestarts += 1
         // Status 2: MediaRemote itself is unavailable, so restarting will not help.
@@ -189,7 +191,7 @@ final class MediaService: ObservableObject {
         current.elapsed = seconds
         current.timestamp = now
         readQueue.async { self.tracker.noteSeek(to: seconds, at: now) }
-        applySystem(track: current, artwork: systemArtwork, tint: systemTint)
+        applySystem(track: current, artwork: systemArtwork, tint: systemTint, key: systemArtworkKey)
     }
 
     func openSourceApp() {
@@ -245,33 +247,43 @@ final class MediaService: ObservableObject {
         guard let update = NowPlayingParser.parse(line) else { return }
         guard let report = update.track else {
             tracker.reset()
-            lastArtworkId = nil
-            lastArtwork = nil
-            lastTint = .white
+            _ = artworkTracker.update(songId: nil, artworkId: nil, hasData: false)
             DispatchQueue.main.async {
                 self.restarts = 0
-                self.applySystem(track: nil, artwork: nil, tint: .white)
+                self.applySystem(track: nil, artwork: nil, tint: .white, key: nil)
             }
             return
         }
 
         let track = tracker.ingest(report)
-        if update.artworkId == nil {
-            lastArtwork = nil
-            lastTint = .white
-        } else if let data = update.artworkData, let (image, tint) = Self.decodeArtwork(data) {
-            lastArtwork = image
-            lastTint = tint
-        } else if update.artworkId != lastArtworkId {
-            lastArtwork = nil
-            lastTint = .white
+        switch artworkTracker.update(songId: track.id, artworkId: update.artworkId, hasData: update.artworkData != nil) {
+        case .decodeAndShow(let id):
+            if let data = update.artworkData, let (image, tint) = Self.decodeArtwork(data) {
+                artworkCache[id] = (image, tint)
+            } else {
+                artworkTracker.forget(id)
+            }
+        case .requestAndKeep(let id), .requestAndClear(let id):
+            // The helper sends an image only once; ask again for one we do not hold.
+            if artworkRequested != id {
+                artworkRequested = id
+                DispatchQueue.main.async { self.write("refresh") }
+            }
+        case .show, .keep, .clear:
+            break
         }
-        lastArtworkId = update.artworkId
+        if artworkCache.count > artworkTracker.cachedIds.count {
+            let kept = Set(artworkTracker.cachedIds)
+            artworkCache = artworkCache.filter { kept.contains($0.key) }
+        }
 
-        let artwork = lastArtwork, tint = lastTint
+        let key = artworkTracker.shownId
+        let entry = key.flatMap { artworkCache[$0] }
+        if entry != nil, artworkRequested == key { artworkRequested = nil }
         DispatchQueue.main.async {
             self.restarts = 0
-            self.applySystem(track: track, artwork: artwork, tint: tint)
+            self.applySystem(track: track, artwork: entry?.image, tint: entry?.tint ?? .white,
+                             key: entry == nil ? nil : key)
         }
     }
 
@@ -305,9 +317,10 @@ final class MediaService: ObservableObject {
 
     // MARK: Publishing (main thread)
 
-    private func applySystem(track: Track?, artwork: NSImage?, tint: Color) {
+    private func applySystem(track: Track?, artwork: NSImage?, tint: Color, key: String?) {
         systemTrack = track
         systemArtwork = artwork
+        systemArtworkKey = key
         systemTint = tint
         publish()
     }
@@ -329,6 +342,8 @@ final class MediaService: ObservableObject {
         let fromSystem = selection.source == .system
         let newArtwork = fromSystem ? systemArtwork : nil
         if artwork !== newArtwork { artwork = newArtwork }
+        let newKey = fromSystem ? systemArtworkKey : nil
+        if artworkKey != newKey { artworkKey = newKey }
         let newTint = fromSystem ? systemTint : Color.white
         if tint != newTint { tint = newTint }
         if previousApp != track?.bundleId || (sourceIcon == nil && track != nil) {

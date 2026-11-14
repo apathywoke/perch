@@ -106,7 +106,8 @@ struct IslandView: View {
                         .transition(contentTransition(from: 0.9))
                 }
 
-                ArtworkView(image: media.artwork, size: art, radius: art * (expanded ? 0.2 : 0.24))
+                ArtworkView(image: media.artwork, key: media.artworkKey, size: art,
+                            radius: art * (expanded ? 0.2 : 0.24))
                     .onTapGesture {
                         expanded ? media.openSourceApp() : NotchController.shared.collapsedClicked()
                     }
@@ -538,15 +539,17 @@ private struct ExpandedView: View {
 
 // MARK: - Pieces
 
-/// Artwork with a card flip when the image changes.
+/// Artwork with a card flip when the picture changes. `key` identifies the
+/// picture itself, so the same artwork sent again (players do that after a
+/// seek or a pause) does not flip.
 struct ArtworkView: View {
     let image: NSImage?
+    let key: String?
     let size: CGFloat
     let radius: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let key = image.map(ObjectIdentifier.init)
         ZStack {
             face
                 .id(key)
@@ -702,12 +705,15 @@ private struct ScrubberView: NSViewRepresentable {
 
     func updateNSView(_ view: ScrubberNSView, context: Context) {
         view.seek = seek
+        view.toggleTimeStyle = { timeStyle = timeStyle == .remaining ? .total : .remaining }
         view.configure(track: track, scale: scale, showRemaining: timeStyle == .remaining)
     }
 }
 
 final class ScrubberNSView: NSView {
     var seek: ((Double) -> Void)?
+    /// Switches the right-hand label between time remaining and total duration.
+    var toggleTimeStyle: (() -> Void)?
     private var track: Track?
     private var scale: CGFloat = 1
     private var showRemaining = true
@@ -733,8 +739,13 @@ final class ScrubberNSView: NSView {
         leftLabel.alignmentMode = .left
         rightLabel.alignmentMode = .right
         [rail, fill, leftLabel, rightLabel].forEach { layer?.addSublayer($0) }
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                       owner: self))
+    }
+
+    /// The bar thickens only while the pointer is over the bar itself.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: seekRect, options: [.mouseEnteredAndExited, .activeAlways], owner: self))
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -772,6 +783,12 @@ final class ScrubberNSView: NSView {
     private var barRect: CGRect {
         let inset = labelWidth + 6 * scale
         return CGRect(x: inset, y: 0, width: max(10, bounds.width - inset * 2), height: bounds.height)
+    }
+    /// Where a click moves the playhead: the bar, with a little slack at its ends.
+    private var seekRect: CGRect { barRect.insetBy(dx: -3 * scale, dy: 0) }
+    /// The right-hand time label.
+    private var timeToggleRect: CGRect {
+        CGRect(x: bounds.width - labelWidth - 4 * scale, y: 0, width: labelWidth + 4 * scale, height: bounds.height)
     }
 
     override func layout() {
@@ -843,7 +860,12 @@ final class ScrubberNSView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let track, track.duration > 0 else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if timeToggleRect.contains(point) {
+            toggleTimeStyle?()
+            return
+        }
+        guard seekRect.contains(point), let track, track.duration > 0 else { return }
         dragFraction = fraction(for: event)
         needsLayout = true
     }
@@ -874,6 +896,14 @@ final class ScrubberNSView: NSView {
         guard let track, track.duration > 0 else { return NSLocalizedString("Unknown", comment: "") }
         return String(format: NSLocalizedString("%@ of %@", comment: "position of duration"),
                       TimeText.format(track.position()), TimeText.format(track.duration))
+    }
+
+    override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
+        let name = NSLocalizedString("Switch between remaining and total time", comment: "")
+        return [NSAccessibilityCustomAction(name: name) { [weak self] in
+            self?.toggleTimeStyle?()
+            return true
+        }]
     }
 
     override func accessibilityPerformIncrement() -> Bool { step(by: 10) }
