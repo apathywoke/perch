@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION="0.2.1"
+VERSION="0.2.2"
 APP="dist/Perch.app"
 
 echo "▸ Compiling"
