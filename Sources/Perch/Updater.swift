@@ -213,8 +213,9 @@ final class Updater: ObservableObject {
     /// HTTPS only, follows GitHub's redirects to its download servers, no cookies or config files.
     @discardableResult
     private static func curl(_ arguments: [String]) throws -> Data {
-        try run("/usr/bin/curl", ["--silent", "--show-error", "--fail", "--location", "--proto", "=https",
-                                  "--proto-redir", "=https", "--max-time", "120", "--disable",
+        // --disable must come first: it stops curl from reading a user's ~/.curlrc.
+        try run("/usr/bin/curl", ["--disable", "--silent", "--show-error", "--fail", "--location",
+                                  "--proto", "=https", "--proto-redir", "=https", "--max-time", "120",
                                   "--user-agent", "Perch-Updater"] + arguments)
     }
 
