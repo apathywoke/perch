@@ -88,27 +88,43 @@ struct IslandView: View {
                 .shadow(color: .black.opacity(expanded && shadow ? 0.38 : 0), radius: 22, y: 10)
 
             ZStack(alignment: .top) {
-                if expanded {
-                    ExpandedView(model: model, media: media, metrics: player, scale: s)
-                        .frame(width: player.width, height: player.height)
-                        .transition(morphTransition(from: growFrom))
-                } else if let hud {
-                    HUDView(state: hud, layout: hudLayout(notch: notch), tint: media.tint)
-                        .frame(width: size.width, height: size.height, alignment: .top)
-                        .transition(contentTransition(from: 0.9))
-                } else if card, let track = media.track {
-                    PeekView(track: track)
-                        .padding(.top, notch.height)
-                        .padding(.horizontal, NotchLayout.peekSide)
-                        .frame(width: size.width, height: size.height, alignment: .top)
-                        .transition(contentTransition(from: 0.9))
+                // The open player stays built while the island is closed, hidden and
+                // idle, so opening only animates it. Building it as the island opened
+                // took the main thread long enough to make the opening jerk, worst
+                // after a pause when the processor is slow to wake.
+                ExpandedView(model: model, media: media, metrics: player, scale: s, active: model.prepared)
+                    .frame(width: player.width, height: player.height)
+                    .modifier(PlayerReveal(shown: expanded, from: growFrom, reduceMotion: reduceMotion))
+                    .allowsHitTesting(expanded)
+                    .accessibilityHidden(!expanded)
+
+                if !expanded {
+                    if let hud {
+                        HUDView(state: hud, layout: hudLayout(notch: notch), tint: media.tint)
+                            .frame(width: size.width, height: size.height, alignment: .top)
+                            .transition(contentTransition(from: 0.9))
+                    } else if card, let track = media.track {
+                        PeekView(track: track)
+                            .padding(.top, notch.height)
+                            .padding(.horizontal, NotchLayout.peekSide)
+                            .frame(width: size.width, height: size.height, alignment: .top)
+                            .transition(contentTransition(from: 0.9))
+                    }
                 }
 
-                if expanded, lyrics, let track = media.track {
-                    LyricsPanel(track: track, scale: s) { media.seek(to: $0) }
+                // Kept built while the island is closed, hidden and still: building
+                // the lines as the island opened made the opening stutter.
+                if lyrics, let track = media.track {
+                    LyricsPanel(track: track, scale: s, active: expanded, prepared: model.prepared) {
+                        media.seek(to: $0)
+                    }
                         .frame(width: player.width - 2 * player.inset, height: lyricsHeight)
+                        .scaleEffect(expanded || reduceMotion ? 1 : 0.96, anchor: .top)
+                        .opacity(expanded ? 1 : 0)
+                        .animation(expanded ? Motion.contentIn : Motion.contentOut, value: expanded)
+                        .allowsHitTesting(expanded)
+                        .accessibilityHidden(!expanded)
                         .offset(y: player.height - 12 * s)
-                        .transition(contentTransition(from: 0.96))
                 }
 
                 // While the player is open, the indicator gets its own row at the bottom.
@@ -181,13 +197,6 @@ struct IslandView: View {
     /// heavily blurred, and grows with the shape on the same spring, coming
     /// into focus as the shape settles. Closing runs the same path backwards.
     /// With "Reduce motion" it only fades.
-    private func morphTransition(from start: CGSize) -> AnyTransition {
-        if reduceMotion {
-            return .asymmetric(insertion: .opacity.animation(Motion.contentIn),
-                               removal: .opacity.animation(Motion.contentOut))
-        }
-        return .modifier(active: Morph(progress: 0, from: start), identity: Morph(progress: 1, from: start))
-    }
 
     /// Smaller content (indicator, track card): grows in from slightly smaller
     /// and blurred, leaves quickly.
@@ -211,6 +220,24 @@ struct IslandView: View {
 // MARK: - Motion helpers
 
 /// Drives the open player's content from the island's progress (0 closed, 1 open).
+/// Shows the open player as the island opens: it grows from the closed island's
+/// proportions, unblurring as it comes; with "Reduce motion" it only fades.
+private struct PlayerReveal: ViewModifier {
+    let shown: Bool
+    let from: CGSize
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+                .opacity(shown ? 1 : 0)
+                .animation(shown ? Motion.contentIn : Motion.contentOut, value: shown)
+        } else {
+            content.modifier(Morph(progress: shown ? 1 : 0, from: from))
+        }
+    }
+}
+
 private struct Morph: ViewModifier, Animatable {
     var progress: CGFloat
     let from: CGSize
@@ -414,6 +441,8 @@ private struct ExpandedView: View {
     @ObservedObject private var outputs = AudioOutputs.shared
     let metrics: NotchLayout.PlayerMetrics
     let scale: CGFloat
+    /// On screen; while the island is closed the player is kept but idle.
+    let active: Bool
     @AppStorage(Pref.artworkGlow) private var glow = true
     @AppStorage(Pref.showAlbum) private var showAlbum = false
     @AppStorage(Pref.visualizer) private var visualizer = true
@@ -455,7 +484,7 @@ private struct ExpandedView: View {
                 .animation(Motion.textIn, value: track.id)
                 .offset(x: m.textLeading, y: m.textTop)
 
-                ScrubberView(track: track, tint: media.tint, scale: s) { media.seek(to: $0) }
+                ScrubberView(track: track, tint: media.tint, scale: s, active: active) { media.seek(to: $0) }
                     .frame(width: m.width - 2 * (m.inset + 2 * s), height: 16 * s)
                     .offset(x: m.inset + 2 * s, y: m.scrubberCenter - 8 * s)
 
@@ -724,6 +753,7 @@ private struct ScrubberView: NSViewRepresentable {
     let track: Track
     let tint: Color
     let scale: CGFloat
+    let active: Bool
     let seek: (Double) -> Void
     @AppStorage(Pref.timeStyle) private var timeStyle = TimeStyle.remaining
 
@@ -732,7 +762,7 @@ private struct ScrubberView: NSViewRepresentable {
     func updateNSView(_ view: ScrubberNSView, context: Context) {
         view.seek = seek
         view.toggleTimeStyle = { timeStyle = timeStyle == .remaining ? .total : .remaining }
-        view.configure(track: track, scale: scale, showRemaining: timeStyle == .remaining)
+        view.configure(track: track, scale: scale, showRemaining: timeStyle == .remaining, active: active)
     }
 }
 
@@ -746,6 +776,8 @@ final class ScrubberNSView: NSView {
     private var dragFraction: CGFloat?
     private var hovering = false
     private var timer: Timer?
+    /// On screen; the time labels only tick then.
+    private var active = true
 
     private let rail = CALayer()
     private let fill = CALayer()
@@ -778,10 +810,11 @@ final class ScrubberNSView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func configure(track: Track, scale: CGFloat, showRemaining: Bool) {
+    func configure(track: Track, scale: CGFloat, showRemaining: Bool, active: Bool) {
         self.track = track
         self.scale = scale
         self.showRemaining = showRemaining
+        self.active = active
         needsLayout = true
         updateTimer()
     }
@@ -793,7 +826,7 @@ final class ScrubberNSView: NSView {
     }
 
     private func updateTimer() {
-        let wanted = window != nil && track?.isPlaying == true
+        let wanted = window != nil && active && track?.isPlaying == true
         if wanted, timer == nil {
             let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.updateLabels() }
             timer.tolerance = 0.1

@@ -15,6 +15,10 @@ final class NotchModel: ObservableObject {
     @Published var visible = true
     /// The cursor is resting on the collapsed island (it swells slightly before opening).
     @Published var hovering = false
+    /// The open player is kept up to date: it is on screen, or about to be (the
+    /// pointer rests on the island). Doing that work before the island opens
+    /// keeps it out of the opening animation, and wakes the processor first.
+    @Published var prepared = false
     /// Volume / brightness indicator currently shown, if any.
     @Published var hud: HUDState?
     /// The open player shows lyrics (only while the feature is on).
@@ -136,6 +140,19 @@ final class NotchController {
 
         refresh()
         panel.orderFrontRegardless()
+
+        if FrameProbe.enabled {
+            // Lets a script open and close the island to measure the animation.
+            DistributedNotificationCenter.default().addObserver(forName: FrameProbe.toggleNotification, object: nil,
+                                                                queue: .main) { [weak self] _ in self?.toggle() }
+            // And to rest the pointer on it, as before an opening on hover.
+            DistributedNotificationCenter.default().addObserver(forName: FrameProbe.hoverNotification, object: nil,
+                                                                queue: .main) { [weak self] _ in
+                guard let self else { return }
+                self.model.prepared = true
+                withAnimation(Motion.swell) { self.model.hovering = true }
+            }
+        }
     }
 
     // MARK: Screen & visibility
@@ -149,7 +166,9 @@ final class NotchController {
     }
 
     /// Recomputes everything that depends on the screen and on settings.
-    func refresh() {
+    /// `spaces: false` reuses what is known about full-screen spaces: asking the
+    /// window server takes several milliseconds, too long while the island moves.
+    func refresh(spaces: Bool = true) {
         guard let panel, let screen = pickScreen() else { return }
         self.screen = screen
 
@@ -159,7 +178,7 @@ final class NotchController {
         if geometry.notch != model.notchSize || geometry.hasNotch != model.hasNotch {
             Self.log.notice("Display: notch \(geometry.hasNotch), \(Int(geometry.notch.width))×\(Int(geometry.notch.height))")
         }
-        let nowFullscreen = Pref.bool(Pref.hideInFullscreen) && Self.isFullscreen(screen)
+        let nowFullscreen = Pref.bool(Pref.hideInFullscreen) && (spaces ? Self.isFullscreen(screen) : fullscreen)
         if nowFullscreen != fullscreen {
             fullscreen = nowFullscreen
             Self.log.notice("Full-screen space: \(nowFullscreen)")
@@ -292,16 +311,27 @@ final class NotchController {
 
     private func setPhase(_ phase: NotchModel.Phase) {
         guard model.phase != phase else { return }
+        if FrameProbe.enabled, let view = panel?.contentView {
+            FrameProbe.measure(on: view, label: "\(phase)")
+        }
+        FrameProbe.step("start")
         withAnimation(phase == .collapsed ? Motion.shrink : Motion.grow) {
             model.phase = phase
             if phase == .expanded { model.hovering = false }
         }
+        FrameProbe.step("phase set")
+        updatePrepared()
         cachedHitRect = nil
         if phase == .expanded, Pref.bool(Pref.haptics) {
             NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         }
+        FrameProbe.step("haptic")
         // Size changed, so the visibility rules and the hit area did too.
-        DispatchQueue.main.async { [weak self] in self?.refresh() }
+        DispatchQueue.main.async { [weak self] in
+            FrameProbe.step("before refresh")
+            self?.refresh(spaces: false)
+            FrameProbe.step("refresh")
+        }
     }
 
     // MARK: Volume / brightness indicator
@@ -426,6 +456,7 @@ final class NotchController {
         }
         guard inside != isInside else { return }
         isInside = inside
+        updatePrepared()
 
         let swell = inside && model.phase != .expanded
         if model.hovering != swell {
@@ -447,6 +478,11 @@ final class NotchController {
             guard model.phase == .expanded else { return }
             scheduleClose()
         }
+    }
+
+    private func updatePrepared() {
+        let prepared = isInside || model.phase == .expanded
+        if model.prepared != prepared { model.prepared = prepared }
     }
 
     private var holds = 0
@@ -503,5 +539,68 @@ final class NotchController {
             ("Screen being captured", capturing ? "yes" : "no"),
             ("Indicator on screen", model.hud == nil ? "no" : "yes"),
         ]
+    }
+}
+
+/// Developer tool: `defaults write dev.perch.Perch debugAnimation -bool true`
+/// logs how smoothly the island opens and closes: frames that came late are
+/// frames where the main thread was busy and the animation stuttered.
+/// `Scripts`-side, the island can then be toggled with the distributed
+/// notification `dev.perch.Perch.debugToggle`.
+final class FrameProbe: NSObject {
+    static let enabled = UserDefaults.standard.bool(forKey: "debugAnimation")
+    static let toggleNotification = Notification.Name("dev.perch.Perch.debugToggle")
+    static let hoverNotification = Notification.Name("dev.perch.Perch.debugHover")
+    private static var current: FrameProbe?
+
+    private var link: CADisplayLink?
+    private var times: [CFTimeInterval] = []
+    private var frame: CFTimeInterval = 1.0 / 60
+    private let label: String
+    private let start = CACurrentMediaTime()
+
+    private init(label: String) { self.label = label }
+
+    static func measure(on view: NSView, label: String) {
+        current?.finish()
+        let probe = FrameProbe(label: label)
+        let link = view.displayLink(target: probe, selector: #selector(tick(_:)))
+        link.add(to: .main, forMode: .common)
+        probe.link = link
+        current = probe
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak probe] in probe?.finish() }
+    }
+
+    private var steps: [String] = []
+    private var lastStep = CACurrentMediaTime()
+
+    /// Notes how long the island's own work took since the previous step.
+    static func step(_ name: String) {
+        guard let probe = current, probe.times.isEmpty else { return }
+        let now = CACurrentMediaTime()
+        probe.steps.append("\(name) \(Int((now - probe.lastStep) * 1000))")
+        probe.lastStep = now
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        if times.isEmpty { Self.step("first frame") }
+        times.append(link.timestamp)
+        frame = max(1.0 / 120, link.targetTimestamp - link.timestamp)
+    }
+
+    private func finish() {
+        guard let link else { return }
+        link.invalidate()
+        self.link = nil
+        if Self.current === self { Self.current = nil }
+        let gaps = zip(times, times.dropFirst()).map { $1 - $0 }
+        let late = gaps.filter { $0 > frame * 1.5 }
+        let worst = (gaps.max() ?? 0) * 1000
+        let firstDelay = ((times.first ?? start) - start) * 1000
+        NotchController.log.notice("""
+            Animation \(self.label, privacy: .public): \(gaps.count + 1) frames, \(late.count) late, \
+            worst gap \(Int(worst)) ms, first frame after \(Int(firstDelay)) ms, frame \(Int(self.frame * 1000)) ms; \
+            steps (ms): \(self.steps.joined(separator: ", "), privacy: .public)
+            """)
     }
 }

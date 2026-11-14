@@ -8,6 +8,11 @@ struct LyricsPanel: View {
     @ObservedObject private var service = LyricsService.shared
     let track: Track
     let scale: CGFloat
+    /// On screen: the lyrics are looked up only then.
+    let active: Bool
+    /// On screen or about to be. While the island is closed the panel stays
+    /// built but does nothing: no requests, no clock, no redrawing.
+    let prepared: Bool
     let seek: (Double) -> Void
     @AppStorage(Pref.lyricsSize) private var size = LyricsSize.medium
     @AppStorage(Pref.lyricsWordByWord) private var wordByWord = true
@@ -17,7 +22,7 @@ struct LyricsPanel: View {
         Group {
             switch service.state {
             case .idle, .loading:
-                message("Looking for lyrics…", progress: true)
+                if active { message("Looking for lyrics…", progress: true) }
             case .notFound:
                 VStack(spacing: 8 * scale) {
                     message("No lyrics for this song")
@@ -37,7 +42,7 @@ struct LyricsPanel: View {
                 }
             case .loaded(.synced(let lines)):
                 SyncedLyricsView(lines: lines, track: track, fontSize: fontSize, scale: scale,
-                                 wordByWord: wordByWord, seek: seek, source: service.source)
+                                 wordByWord: wordByWord, active: prepared, seek: seek, source: service.source)
             case .loaded(.plain(let lines)):
                 PlainLyricsView(lines: lines, track: track, fontSize: fontSize * 0.8, scale: scale,
                                 source: service.source)
@@ -46,8 +51,9 @@ struct LyricsPanel: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { service.load(for: track) }
-        .onChange(of: track.id) { _, _ in service.load(for: track) }
+        .onAppear { if active { service.load(for: track) } }
+        .onChange(of: active) { _, now in if now { service.load(for: track) } }
+        .onChange(of: track.id) { _, _ in if active { service.load(for: track) } }
     }
 
     private func message(_ text: LocalizedStringKey, progress: Bool = false, symbol: String? = nil) -> some View {
@@ -116,6 +122,7 @@ private struct SyncedLyricsView: View {
     let fontSize: CGFloat
     let scale: CGFloat
     let wordByWord: Bool
+    let active: Bool
     let seek: (Double) -> Void
     let source: LyricsService.Source
     @StateObject private var clock = LyricsClock()
@@ -126,6 +133,11 @@ private struct SyncedLyricsView: View {
 
     /// Where the current line rests: a little above the middle, as in Apple Music.
     private let anchor: CGFloat = 0.3
+    /// Lines drawn before and after the current one. Farther ones are invisible
+    /// (see LyricLineView), so they are not built at all: a song has dozens of
+    /// lines, and building them all made the island stutter as it opened.
+    private let before = 4
+    private let after = 7
 
     var body: some View {
         let spacing = fontSize * 0.6
@@ -133,42 +145,61 @@ private struct SyncedLyricsView: View {
             let tops = lineTops(spacing: spacing)
             let focus = clock.current ?? 0
             let offset = (geometry.size.height * anchor - (tops.indices.contains(focus) ? tops[focus] : 0)).rounded()
-            VStack(alignment: .leading, spacing: spacing) {
-                ForEach(lines) { line in
+            let shown = max(0, min(lines.count, focus - before))..<max(0, min(lines.count, focus + after))
+            // Each line is placed on its own, so lines coming into and leaving the
+            // drawn range do not move the others.
+            ZStack(alignment: .topLeading) {
+                ForEach(lines[shown]) { line in
                     let distance = clock.current.map { line.id - $0 } ?? line.id + 1
                     LyricLineView(line: line, distance: distance, track: track, fontSize: fontSize,
-                                  wordByWord: wordByWord, reduceMotion: reduceMotion)
+                                  wordByWord: wordByWord, active: active, reduceMotion: reduceMotion)
+                        .fixedSize(horizontal: false, vertical: true)
                         .background {
                             GeometryReader { proxy in
                                 Color.clear.preference(key: LineHeights.self, value: [line.id: proxy.size.height])
                             }
                         }
-                        .offset(y: offset)
+                        .offset(y: tops[line.id] + offset)
                         .animation(ready ? scroll(for: distance) : nil, value: offset)
                         .onTapGesture { seek(line.time) }
                         // Lines scrolled out of the panel still sit over the player's
                         // buttons; they must not take those clicks.
                         .allowsHitTesting(isInside(line, tops: tops, offset: offset, height: geometry.size.height))
                 }
-                LyricsSourceView(source: source, track: track, scale: scale)
-                    .offset(y: offset)
-                    .animation(ready ? scroll(for: 8) : nil, value: offset)
+                if shown.upperBound == lines.count {
+                    LyricsSourceView(source: source, track: track, scale: scale)
+                        .offset(y: endOfLines(tops: tops, spacing: spacing) + offset)
+                        .animation(ready ? scroll(for: 8) : nil, value: offset)
+                }
             }
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
             .clipped()
         }
         .onPreferenceChange(LineHeights.self) { measured in
-            heights = measured
-            // Only animate once every line has its real height, so opening does not scroll.
+            let merged = heights.merging(measured) { $1 }
+            if merged != heights { heights = merged }
+            // Only animate once the lines have their real heights, so opening does not scroll.
             if !ready { DispatchQueue.main.async { ready = true } }
         }
-        .onAppear { clock.follow(lines, track) }
-        .onChange(of: track) { _, new in clock.follow(lines, new) }
+        .onAppear { if active { clock.follow(lines, track) } }
+        .onChange(of: active) { _, now in
+            guard now else {
+                clock.stop()
+                return
+            }
+            // Jump to the line being sung without scrolling there.
+            ready = false
+            clock.follow(lines, track)
+            DispatchQueue.main.async { ready = true }
+        }
+        .onChange(of: track) { _, new in if active { clock.follow(lines, new) } }
         // Heard timing changes the times but not the text: keep scrolling smoothly then.
-        .onChange(of: lines.map(\.text)) { _, _ in ready = false }
-        .onChange(of: lines) { _, new in clock.follow(new, track) }
-        .onChange(of: delay) { _, _ in clock.follow(lines, track) }
+        .onChange(of: lines.map(\.text)) { _, _ in
+            ready = false
+            heights = [:]
+        }
+        .onChange(of: lines) { _, new in if active { clock.follow(new, track) } }
+        .onChange(of: delay) { _, _ in if active { clock.follow(lines, track) } }
         .onDisappear { clock.stop() }
         .mask {
             LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.16),
@@ -188,6 +219,11 @@ private struct SyncedLyricsView: View {
             y += (heights[line.id] ?? fontSize * 1.25) + spacing
         }
         return tops
+    }
+
+    private func endOfLines(tops: [CGFloat], spacing: CGFloat) -> CGFloat {
+        guard let last = lines.last, let top = tops.last else { return 0 }
+        return top + (heights[last.id] ?? fontSize * 1.25) + spacing
     }
 
     private func isInside(_ line: LyricLine, tops: [CGFloat], offset: CGFloat, height: CGFloat) -> Bool {
@@ -221,13 +257,14 @@ private struct LyricLineView: View {
     let track: Track
     let fontSize: CGFloat
     let wordByWord: Bool
+    let active: Bool
     let reduceMotion: Bool
 
     var body: some View {
         let current = distance == 0
         let near = abs(distance) <= 6
         // Only the line being sung redraws with the display, at most 30 times a second.
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !(current && wordByWord && track.isPlaying))) { _ in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !(active && current && wordByWord && track.isPlaying))) { _ in
             // The real clock, not the timeline's date, which can lie ahead of it.
             let position = current ? track.position(at: Date()) + LyricsClock.shift(for: track) : 0
             WordFlow(spacing: fontSize * 0.28, lineSpacing: fontSize * 0.12) {
@@ -278,7 +315,7 @@ private struct KaraokeWord: View {
         let amount = reduceMotion ? (fill > 0 ? 1 : 0) : fill
         let singing = glow && amount > 0 && amount < 1 && !reduceMotion
         let label = Text(verbatim: text).font(.system(size: fontSize, weight: .bold))
-        label
+        let word = label
             .foregroundStyle(.white.opacity(0.4))
             .overlay {
                 if layered {
@@ -288,8 +325,14 @@ private struct KaraokeWord: View {
                         .opacity(lit ? 1 : 0)
                 }
             }
-            .shadow(color: .white.opacity(singing ? 0.35 : 0), radius: fontSize * 0.3)
-            .offset(y: singing ? -fontSize * 0.06 * sin(.pi * amount) : 0)
+        // Only the line being sung glows; a shadow on every word is costly to build.
+        if glow {
+            word
+                .shadow(color: .white.opacity(singing ? 0.35 : 0), radius: fontSize * 0.3)
+                .offset(y: singing ? -fontSize * 0.06 * sin(.pi * amount) : 0)
+        } else {
+            word
+        }
     }
 }
 
@@ -317,19 +360,25 @@ private struct WordFlow: Layout {
     var spacing: CGFloat
     var lineSpacing: CGFloat
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+    /// Every word's size, measured once: laying the lines out again (the island
+    /// changing size as it opens) then costs no text measuring.
+    func makeCache(subviews: Subviews) -> [CGSize] {
+        subviews.map { $0.sizeThatFits(.unspecified) }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize]) -> CGSize {
+        let rows = arrange(cache, width: proposal.width ?? .infinity)
         let width = rows.map(\.width).max() ?? 0
         let height = rows.map(\.height).reduce(0, +) + lineSpacing * CGFloat(max(0, rows.count - 1))
         return CGSize(width: proposal.width ?? width, height: height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize]) {
         var y = bounds.minY
-        for row in arrange(subviews, width: bounds.width) {
+        for row in arrange(cache, width: bounds.width) {
             var x = bounds.minX
             for index in row.items {
-                let size = subviews[index].sizeThatFits(.unspecified)
+                let size = cache[index]
                 subviews[index].place(at: CGPoint(x: x, y: y + (row.height - size.height)), proposal: .unspecified)
                 x += size.width + spacing
             }
@@ -343,11 +392,11 @@ private struct WordFlow: Layout {
         var height: CGFloat = 0
     }
 
-    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+    private func arrange(_ sizes: [CGSize], width: CGFloat) -> [Row] {
         var rows: [Row] = []
         var row = Row()
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+        for index in sizes.indices {
+            let size = sizes[index]
             let needed = row.items.isEmpty ? size.width : row.width + spacing + size.width
             if !row.items.isEmpty, needed > width {
                 rows.append(row)
