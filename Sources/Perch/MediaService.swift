@@ -406,12 +406,12 @@ final class MediaService: ObservableObject {
         [01:29.00]Hold the note
         """))
 
-    static func preview() -> MediaService {
+    static func preview(track: Track? = nil) -> MediaService {
         let service = MediaService()
-        service.track = Track(title: NSLocalizedString("Song title", comment: "preview"),
-                              artist: NSLocalizedString("Artist", comment: "preview"),
-                              bundleId: previewBundleId,
-                              duration: 214, elapsed: 71, timestamp: Date(), isPlaying: true)
+        service.track = track ?? Track(title: NSLocalizedString("Song title", comment: "preview"),
+                                       artist: NSLocalizedString("Artist", comment: "preview"),
+                                       bundleId: previewBundleId,
+                                       duration: 214, elapsed: 71, timestamp: Date(), isPlaying: true)
         service.artwork = previewArtwork()
         service.artworkKey = "preview"
         service.tint = Color(nsColor: NSColor(srgbRed: 0.66, green: 0.52, blue: 1, alpha: 1))
