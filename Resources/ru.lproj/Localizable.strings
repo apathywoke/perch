@@ -214,3 +214,28 @@
 "Song title" = "Название песни";
 "Artist" = "Исполнитель";
 "Version %@" = "Версия %@";
+
+/* Updates */
+"Updates" = "Обновления";
+"Check for updates automatically" = "Проверять обновления автоматически";
+"Perch asks GitHub for the latest release once a day while this is on. The request carries nothing about you, your Mac or your music." = "Пока это включено, Perch раз в день спрашивает у GitHub последний релиз. В запросе нет ничего о вас, вашем Mac или вашей музыке.";
+"Check now" = "Проверить сейчас";
+"Never checked" = "Ещё не проверялось";
+"Last checked: %@" = "Последняя проверка: %@";
+"Checking…" = "Проверка…";
+"Up to date" = "Последняя версия";
+"Version %@ is available" = "Доступна версия %@";
+"Install and restart" = "Установить и перезапустить";
+"Download" = "Скачать";
+"What's new" = "Что нового";
+"Downloading…" = "Загрузка…";
+"Installing…" = "Установка…";
+"Update to %@…" = "Обновить до %@…";
+"No network connections, except checking for updates if you turn it on." = "Никаких сетевых соединений, кроме проверки обновлений, если вы её включите.";
+"Asks GitHub once a day. You can change this in Settings." = "Раз в день спрашивает GitHub. Это можно изменить в настройках.";
+"This copy is signed without a certificate, so updates are downloaded from GitHub by hand." = "Эта копия подписана без сертификата, поэтому обновления скачиваются с GitHub вручную.";
+"GitHub answered, but the release could not be read." = "GitHub ответил, но прочитать релиз не удалось.";
+"The download is not Perch." = "Загруженный файл — не Perch.";
+"The download is not newer than this version." = "Загруженная версия не новее текущей.";
+"The download is not signed like this copy of Perch, so it was not installed." = "Загруженная версия подписана не так, как эта копия Perch, поэтому она не установлена.";
+"The connection to GitHub failed." = "Не удалось связаться с GitHub.";

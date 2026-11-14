@@ -47,6 +47,9 @@ enum Pref {
     static let onboardingDone = "onboardingDone"
     // Settings window
     static let settingsPane = "settingsPane"
+    // Updates (off unless the user turns them on)
+    static let updateChecks = "updateChecks"
+    static let lastUpdateCheck = "lastUpdateCheck"
     // Shortcuts
     static let hotkeys = "hotkeys"
 
@@ -82,6 +85,7 @@ enum Pref {
         hudColor: VisualizerColor.white.rawValue,
         hudDuration: 1.6,
         fallbackSources: true,
+        updateChecks: false,
     ]
 
     private static var store: UserDefaults { .standard }

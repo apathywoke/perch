@@ -518,7 +518,8 @@ private struct AboutPane: View {
             }
             Section("Privacy") {
                 PrivacyRow(symbol: "eye.slash.fill", color: .blue, text: "No telemetry, analytics or crash reporting.")
-                PrivacyRow(symbol: "wifi.slash", color: .green, text: "No network connections of any kind.")
+                PrivacyRow(symbol: "wifi.slash", color: .green,
+                           text: "No network connections, except checking for updates if you turn it on.")
                 PrivacyRow(symbol: "lock.fill", color: .orange, text: "No Screen Recording or microphone access.")
                 PrivacyRow(symbol: "hand.raised.fill", color: .indigo,
                            text: "Accessibility is requested only for the optional volume and brightness indicators.")
@@ -527,6 +528,7 @@ private struct AboutPane: View {
                 PrivacyRow(symbol: "chevron.left.forwardslash.chevron.right", color: .gray,
                            text: "Open source under the GNU GPL v3 licence.")
             }
+            UpdatesSection()
             Section {
                 LabeledContent {
                     HStack(spacing: 8) {
@@ -563,6 +565,66 @@ private struct AboutPane: View {
                 HotkeyCenter.shared.reload()
             }
         }
+    }
+}
+
+private struct UpdatesSection: View {
+    @ObservedObject private var updater = Updater.shared
+    @AppStorage(Pref.updateChecks) private var automatic = false
+
+    var body: some View {
+        Section {
+            Toggle("Check for updates automatically", isOn: $automatic)
+            LabeledContent {
+                HStack(spacing: 8) { status }
+            } label: {
+                Text(verbatim: String(format: NSLocalizedString("Version %@", comment: ""), updater.currentVersion.description))
+            }
+            if !updater.canInstallInPlace {
+                Text("This copy is signed without a certificate, so updates are downloaded from GitHub by hand.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Updates")
+        } footer: {
+            Text("Perch asks GitHub for the latest release once a day while this is on. The request carries nothing about you, your Mac or your music.")
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        switch updater.state {
+        case .idle:
+            Text(lastChecked).foregroundStyle(.secondary)
+            Button("Check now") { updater.check() }
+        case .checking:
+            ProgressView().controlSize(.small)
+            Text("Checking…").foregroundStyle(.secondary)
+        case .upToDate:
+            StatusBadge(text: "Up to date", color: .green)
+            Button("Check now") { updater.check() }
+        case .available(let release):
+            Text("Version \(release.version.description) is available").fontWeight(.medium)
+            Button("What's new") { NSWorkspace.shared.open(release.page) }
+            Button(updater.canInstallInPlace && release.archive != nil ? "Install and restart" : "Download") {
+                updater.install()
+            }
+            .buttonStyle(.borderedProminent)
+        case .downloading:
+            ProgressView().controlSize(.small)
+            Text("Downloading…").foregroundStyle(.secondary)
+        case .installing:
+            ProgressView().controlSize(.small)
+            Text("Installing…").foregroundStyle(.secondary)
+        case .failed(let message):
+            Text(verbatim: message).font(.footnote).foregroundStyle(.orange).lineLimit(2)
+            Button("Try again") { updater.check() }
+        }
+    }
+
+    private var lastChecked: LocalizedStringKey {
+        guard let date = updater.lastCheck else { return "Never checked" }
+        let relative = RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
+        return "Last checked: \(relative)"
     }
 }
 

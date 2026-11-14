@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         NotchController.shared.start()
         HotkeyCenter.shared.registerAll()
         AudioOutputs.shared.start()
+        Updater.shared.start()
         updateStatusItem()
         SystemHUD.shared.sync()
         if Pref.bool(Pref.onboardingDone) {
@@ -137,6 +138,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        if let release = Updater.shared.availableRelease {
+            let title = String(format: NSLocalizedString("Update to %@…", comment: ""), release.version.description)
+            let item = NSMenuItem(title: title, action: #selector(openUpdates), keyEquivalent: "")
+            item.target = self
+            item.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
         let media = MediaService.shared
         if let track = media.track {
             let title = track.artist.isEmpty ? track.title : "\(track.title) — \(track.artist)"
@@ -167,5 +176,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     @objc private func nextTrack() { MediaService.shared.next() }
     @objc private func previousTrack() { MediaService.shared.previous() }
     @objc private func openSettings() { showSettings() }
+    @objc private func openUpdates() {
+        Pref.set(SettingsPane.about.rawValue, Pref.settingsPane)
+        showSettings()
+    }
     @objc private func quit() { NSApp.terminate(nil) }
 }

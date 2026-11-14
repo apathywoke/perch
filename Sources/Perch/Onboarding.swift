@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @ObservedObject private var hud = SystemHUD.shared
     @AppStorage(Pref.hudEnabled) private var hudEnabled = true
     @AppStorage(Pref.openTrigger) private var openTrigger = OpenTrigger.hover
+    @AppStorage(Pref.updateChecks) private var updateChecks = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let pageCount = 3
@@ -144,6 +145,14 @@ struct OnboardingView: View {
                 Row(symbol: "doc.on.clipboard",
                     text: "Diagnostics are copied to the clipboard only when you ask for them.")
             }
+            VStack(spacing: 4) {
+                Toggle("Check for updates automatically", isOn: $updateChecks)
+                    .toggleStyle(.switch)
+                Text("Asks GitHub once a day. You can change this in Settings.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 4)
         }
     }
 }
