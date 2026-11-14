@@ -2,9 +2,10 @@ import Foundation
 import os
 import PerchCore
 
-/// Lyrics from LRCLIB, only while the user has them turned on and opened.
-/// The request carries the song's title, artist, album and length; results
-/// are kept in memory only and forgotten when Perch quits.
+/// Lyrics from the user's own files or from LRCLIB, only while the user has
+/// them turned on and opened. The LRCLIB request carries the song's title,
+/// artist, album and length; results are kept in memory only and forgotten
+/// when Perch quits.
 final class LyricsService: ObservableObject {
     static let shared = LyricsService()
     static let log = Logger(subsystem: "dev.perch.Perch", category: "lyrics")
@@ -19,9 +20,20 @@ final class LyricsService: ObservableObject {
 
     @Published private(set) var state: State = .idle
 
+    enum Source: Equatable {
+        case lrclib
+        /// A file the user gave for the song.
+        case file
+    }
+
+    @Published private(set) var source: Source = .lrclib
+
     private var cache: [String: Lyrics?] = [:]
     /// The synced lines as loaded, before any timing heard from the song.
     private var base: [LyricLine]?
+    /// Lyrics without timing as loaded, until enough is heard to time them.
+    private var untimed: [String]?
+    private var duration = 0.0
     private var cacheOrder: [String] = []
     private var currentId: String?
     private var generation = 0
@@ -31,6 +43,7 @@ final class LyricsService: ObservableObject {
         guard Pref.bool(Pref.lyricsEnabled), let track else {
             currentId = nil
             base = nil
+            untimed = nil
             state = .idle
             return
         }
@@ -40,12 +53,18 @@ final class LyricsService: ObservableObject {
             return
         }
         currentId = track.id
+        if let own = UserLyricsStore.lyrics(for: track) {
+            generation += 1
+            show(own, for: track, from: .file)
+            return
+        }
         if let cached = cache[track.id] {
             show(cached, for: track)
             return
         }
         state = .loading
         base = nil
+        untimed = nil
         generation += 1
         let request = generation
         DispatchQueue.global(qos: .userInitiated).async {
@@ -69,11 +88,21 @@ final class LyricsService: ObservableObject {
         generation += 1
         currentId = track.id
         base = nil
+        untimed = nil
+        source = .lrclib
         state = .loaded(lyrics)
     }
 
-    private func show(_ lyrics: Lyrics?, for track: Track) {
-        if case .synced(let lines) = lyrics { base = lines } else { base = nil }
+    private func show(_ lyrics: Lyrics?, for track: Track, from source: Source = .lrclib) {
+        base = nil
+        untimed = nil
+        duration = track.duration
+        switch lyrics {
+        case .synced(let lines): base = lines
+        case .plain(let lines): untimed = lines
+        default: break
+        }
+        self.source = source
         state = lyrics.map(State.loaded) ?? .notFound
         SongListener.shared.lyricsLoaded(for: track)
     }
@@ -83,12 +112,46 @@ final class LyricsService: ObservableObject {
         id == currentId ? base : nil
     }
 
+    /// What listening needs to know about the lyrics on show.
+    struct Listenable {
+        let text: String
+        /// The sung part of the song; once nearly all of it was heard, the song is known.
+        let span: ClosedRange<Double>?
+    }
+
+    /// The lyrics of the song on show, if hearing the song can time them better.
+    func listenable(for id: String) -> Listenable? {
+        guard id == currentId else { return nil }
+        if let base {
+            guard !base.allSatisfy({ $0.wordSynced || $0.text.isEmpty }),
+                  let first = base.first(where: { !$0.text.isEmpty })?.time, let last = base.last?.time else { return nil }
+            return Listenable(text: base.map(\.text).joined(separator: "\n"), span: first...max(first, last + 3))
+        }
+        if let untimed, !UntimedLyrics.singable(untimed).isEmpty {
+            return Listenable(text: untimed.joined(separator: "\n"), span: duration > 10 ? 0...(duration - 5) : nil)
+        }
+        return nil
+    }
+
     /// Times the lyrics of the song on show by the words heard in it. Lines up
     /// to `position` are kept as shown, so the line being sung never jumps.
     @discardableResult
     func retime(_ heard: [HeardWord], for id: String, keepingThrough position: Double? = nil) -> [LyricLine]? {
-        guard id == currentId, let base else { return nil }
-        var lines = heard.isEmpty ? base : WordAlignment.align(base, heard: heard)
+        guard id == currentId else { return nil }
+        let start: [LyricLine]
+        if let base {
+            start = base
+        } else if let untimed {
+            // Plain text stays plain until enough of it was heard to place the lines.
+            guard let timed = UntimedLyrics.time(untimed, heard: heard, duration: duration) else {
+                if state != .loaded(.plain(untimed)) { state = .loaded(.plain(untimed)) }
+                return nil
+            }
+            start = timed
+        } else {
+            return nil
+        }
+        var lines = heard.isEmpty ? start : WordAlignment.align(start, heard: heard)
         if let position, case .loaded(.synced(let shown)) = state, shown.count == lines.count,
            let current = LyricsTiming.currentIndex(in: shown, at: position) {
             lines.replaceSubrange(0...current, with: shown[0...current])
@@ -107,12 +170,19 @@ final class LyricsService: ObservableObject {
         load(for: track)
     }
 
+    /// The user added or removed lyrics for this song.
+    func reload(for track: Track) {
+        cache[track.id] = nil
+        retry(for: track)
+    }
+
     /// Forgets everything (the feature was turned off).
     func clear() {
         generation += 1
         cache.removeAll()
         cacheOrder.removeAll()
         base = nil
+        untimed = nil
         currentId = nil
         state = .idle
     }
@@ -124,16 +194,28 @@ final class LyricsService: ObservableObject {
     }
 
     /// Exact lookup first (needs the album), then a search by title and artist.
+    /// LRCLIB often keeps several records of one song, and the exact match can
+    /// be one without timing while another has it, so unless the exact match is
+    /// synced the search runs too and synced lyrics win.
     private static func fetch(_ track: Track) throws -> Lyrics? {
+        var exact: Lyrics?
         if let url = LRCLIB.getURL(title: track.title, artist: track.artist, album: track.album, duration: track.duration) {
             let response = try Network.get(url)
-            if response.status == 200, let lyrics = LRCLIB.parseGet(response.data) { return lyrics }
+            if response.status == 200 { exact = LRCLIB.parseGet(response.data) }
             guard response.status == 200 || response.status == 404 else { throw NetworkError.failed("HTTP \(response.status)") }
+            if case .synced = exact { return exact }
         }
-        guard let url = LRCLIB.searchURL(title: track.title, artist: track.artist) else { return nil }
-        let response = try Network.get(url)
-        guard response.status == 200 else { throw NetworkError.failed("HTTP \(response.status)") }
-        return LRCLIB.parseSearch(response.data, duration: track.duration)
+        guard let url = LRCLIB.searchURL(title: track.title, artist: track.artist) else { return exact }
+        let searched: Lyrics?
+        do {
+            let response = try Network.get(url)
+            guard response.status == 200 else { throw NetworkError.failed("HTTP \(response.status)") }
+            searched = LRCLIB.parseSearch(response.data, duration: track.duration)
+        } catch {
+            if exact != nil { return exact }
+            throw error
+        }
+        return LRCLIB.preferred(exact: exact, searched: searched)
     }
 
     func diagnosticRows() -> [(String, String)] {
@@ -152,6 +234,8 @@ final class LyricsService: ObservableObject {
             ("Lyrics", Pref.bool(Pref.lyricsEnabled) ? "on" : "off"),
             ("Lyrics open", Pref.bool(Pref.lyricsOpen) ? "yes" : "no"),
             ("State", status),
+            ("Source", source == .file ? "your file" : "LRCLIB"),
+            ("Your lyrics files", "\(UserLyricsStore.count())"),
             ("Songs cached in memory", "\(cache.count)"),
         ]
     }

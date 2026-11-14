@@ -523,6 +523,18 @@ private struct LyricsPane: View {
                          : "Needs macOS 26 or later.")
                 }
                 Section {
+                    LabeledContent("Your lyrics files") {
+                        HStack(spacing: 10) {
+                            Text(verbatim: "\(UserLyricsStore.count())")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                            Button("Show in Finder") { UserLyricsStore.showInFinder() }
+                        }
+                    }
+                } footer: {
+                    Text("For songs LRCLIB lacks or gets wrong, choose “Use your own…” under the lyrics or put a file named “Artist - Title.lrc” in this folder. It is used instead of LRCLIB. A file without timing is shown as plain text and, with “Time words by ear” on, is timed as the song plays.")
+                }
+                Section {
                     TilePicker(selection: $space, options: LyricsSpace.allCases.map { option in
                         TileOption(value: option, title: option.title) { linesSample(option.lines) }
                     })
@@ -580,7 +592,7 @@ private struct LyricsPane: View {
             switch listener.status {
             case .listening, .learned: .green
             case .preparing, .waiting: .yellow
-            case .off: .gray
+            case .off, .lyricsClosed: .gray
             default: .orange
             }
         }
@@ -589,7 +601,8 @@ private struct LyricsPane: View {
             switch listener.status {
             case .off: NSLocalizedString("Off", comment: "")
             case .needsNewerSystem: NSLocalizedString("Needs macOS 26 or later", comment: "")
-            case .waiting: NSLocalizedString("Waiting for a song with synced lyrics", comment: "")
+            case .waiting: NSLocalizedString("Waiting for a song with lyrics", comment: "")
+            case .lyricsClosed: NSLocalizedString("Listens while the lyrics are open", comment: "")
             case .unsupportedLanguage(let name):
                 String(format: NSLocalizedString("Songs in %@ are not supported", comment: ""), name)
             case .preparing: NSLocalizedString("Getting ready…", comment: "")

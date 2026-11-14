@@ -59,6 +59,9 @@ final class NotchController {
     private var peekWork: DispatchWorkItem?
     private var hudWork: DispatchWorkItem?
     private var pauseWork: DispatchWorkItem?
+    /// The island is open and showing lyrics. Spotify's position is checked and
+    /// the song listened to only then: nobody sees the timing otherwise.
+    private(set) var lyricsOnScreen = false
     private var swipeAccumulated: CGFloat = 0
     private var swipeFired = false
 
@@ -88,6 +91,17 @@ final class NotchController {
         media.$track
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.trackChanged($0) }
+            .store(in: &cancellables)
+
+        model.$phase.combineLatest(model.$showLyrics)
+            .map { $0 == .expanded && $1 }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] shown in
+                self?.lyricsOnScreen = shown
+                SongListener.shared.lyricsShown(shown)
+                if shown { MediaService.shared.lyricsShown() }
+            }
             .store(in: &cancellables)
 
         let center = NotificationCenter.default

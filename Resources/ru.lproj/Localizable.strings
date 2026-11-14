@@ -283,7 +283,7 @@
 "Forget the timing heard in every song?" = "Забыть тайминг, услышанный во всех песнях?";
 "Forget" = "Забыть";
 "Off" = "Выключено";
-"Waiting for a song with synced lyrics" = "Жду песню с синхронизированным текстом";
+"Waiting for a song with lyrics" = "Жду песню с текстом";
 "Songs in %@ are not supported" = "Язык песни (%@) не поддерживается";
 "Getting ready…" = "Подготовка…";
 "Listening" = "Слушаю";
@@ -292,3 +292,21 @@
 "The player is not making any sound yet." = "Плеер пока не издаёт звука.";
 "No Screen Recording or microphone access. The player's sound is heard only if you turn on timing words by ear, and never leaves this Mac." = "Нет доступа к записи экрана и микрофону. Звук плеера слушается, только если включено уточнение тайминга по звуку, и не покидает этот Mac.";
 "This song is already timed by ear" = "Эта песня уже выверена по звуку";
+
+/* Your own lyrics files */
+"Add lyrics…" = "Добавить текст…";
+"Choose a lyrics file for this song: LRC with timing, or plain text." = "Выберите файл с текстом песни: LRC с таймкодами или обычный текст.";
+"Use your own…" = "Свой файл…";
+"Your lyrics file" = "Текст: ваш файл";
+"Remove" = "Убрать";
+"Move this song's lyrics file to the Trash and look the song up in LRCLIB again." = "Переместить файл с текстом этой песни в Корзину и снова поискать её в LRCLIB.";
+"Your lyrics files" = "Ваши файлы с текстами";
+"Show in Finder" = "Показать в Finder";
+"For songs LRCLIB lacks or gets wrong, choose “Use your own…” under the lyrics or put a file named “Artist - Title.lrc” in this folder. It is used instead of LRCLIB. A file without timing is shown as plain text and, with “Time words by ear” on, is timed as the song plays." = "Если в LRCLIB нет текста песни или он неверный, нажмите «Свой файл…» под текстом или положите в эту папку файл «Артист - Название.lrc». Он заменит LRCLIB. Файл без таймкодов показывается обычным текстом, а с включённым «Уточнять тайминг по звуку» синхронизируется, пока песня играет.";
+"Lyrics for this song" = "Текст песни";
+"Choose a lyrics file for “%@”: LRC with timing, or plain text." = "Выберите файл с текстом для «%@»: LRC с таймкодами или обычный текст.";
+"Use" = "Выбрать";
+"These lyrics could not be used" = "Не удалось использовать этот текст";
+"The file could not be read as text." = "Файл не читается как текст.";
+"The file has no lyrics in it." = "В файле нет текста.";
+"Listens while the lyrics are open" = "Слушает, пока открыт текст";

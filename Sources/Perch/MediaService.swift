@@ -51,6 +51,9 @@ final class MediaService: ObservableObject {
     private var artworkRequested: String?
     private let spotifyClock = SpotifyClock()
 
+    /// The lyrics just came on screen: check Spotify's position right away.
+    func lyricsShown() { spotifyClock.checkSoon() }
+
     // MARK: Lifecycle
 
     func start() {

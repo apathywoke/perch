@@ -8,9 +8,10 @@ import PerchCore
 /// it restarts its clock half a second late, sometimes reports the start of a
 /// song seconds after the song began, and rarely corrects itself afterwards.
 /// For lyrics that is far too much. Spotify's own `player position`, asked
-/// through AppleScript, is exact, so while lyrics are open Perch asks for it
-/// every couple of seconds and right after a song starts. macOS asks the user
-/// once before Perch may talk to Spotify.
+/// through AppleScript, is exact, so while the lyrics are on screen Perch asks
+/// for it every couple of seconds and right after a song starts. Each question
+/// starts osascript, so with the island closed Perch does not ask. macOS asks
+/// the user once before Perch may talk to Spotify.
 final class SpotifyClock {
     static let log = Logger(subsystem: "dev.perch.Perch", category: "spotify-clock")
 
@@ -36,7 +37,7 @@ final class SpotifyClock {
     func noteCorrection(_ seconds: Double) { lastCorrection = seconds }
 
     private var wanted: Bool {
-        guard !denied, Pref.bool(Pref.lyricsEnabled), Pref.bool(Pref.lyricsOpen),
+        guard !denied, Pref.bool(Pref.lyricsEnabled), NotchController.shared.lyricsOnScreen,
               let track = MediaService.shared.track, track.isPlaying,
               track.bundleId == FallbackPlayer.spotify.rawValue else { return false }
         return true

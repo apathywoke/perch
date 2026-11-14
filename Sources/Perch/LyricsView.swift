@@ -19,7 +19,14 @@ struct LyricsPanel: View {
             case .idle, .loading:
                 message("Looking for lyrics…", progress: true)
             case .notFound:
-                message("No lyrics for this song")
+                VStack(spacing: 8 * scale) {
+                    message("No lyrics for this song")
+                    Button("Add lyrics…") { UserLyricsStore.choose(for: track) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12 * scale, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .help(Text("Choose a lyrics file for this song: LRC with timing, or plain text."))
+                }
             case .failed:
                 VStack(spacing: 8 * scale) {
                     message("Lyrics could not be loaded")
@@ -30,9 +37,10 @@ struct LyricsPanel: View {
                 }
             case .loaded(.synced(let lines)):
                 SyncedLyricsView(lines: lines, track: track, fontSize: fontSize, scale: scale,
-                                 wordByWord: wordByWord, seek: seek)
+                                 wordByWord: wordByWord, seek: seek, source: service.source)
             case .loaded(.plain(let lines)):
-                PlainLyricsView(lines: lines, fontSize: fontSize * 0.8, scale: scale)
+                PlainLyricsView(lines: lines, track: track, fontSize: fontSize * 0.8, scale: scale,
+                                source: service.source)
             case .loaded(.instrumental):
                 message("Instrumental", symbol: "music.note")
             }
@@ -109,6 +117,7 @@ private struct SyncedLyricsView: View {
     let scale: CGFloat
     let wordByWord: Bool
     let seek: (Double) -> Void
+    let source: LyricsService.Source
     @StateObject private var clock = LyricsClock()
     @State private var heights: [Int: CGFloat] = [:]
     @State private var ready = false
@@ -141,9 +150,7 @@ private struct SyncedLyricsView: View {
                         // buttons; they must not take those clicks.
                         .allowsHitTesting(isInside(line, tops: tops, offset: offset, height: geometry.size.height))
                 }
-                Text("Lyrics from LRCLIB")
-                    .font(.system(size: 10 * scale, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.3))
+                LyricsSourceView(source: source, track: track, scale: scale)
                     .offset(y: offset)
                     .animation(ready ? scroll(for: 8) : nil, value: offset)
             }
@@ -357,8 +364,10 @@ private struct WordFlow: Layout {
 
 private struct PlainLyricsView: View {
     let lines: [String]
+    let track: Track
     let fontSize: CGFloat
     let scale: CGFloat
+    let source: LyricsService.Source
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -369,9 +378,7 @@ private struct PlainLyricsView: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Text("Lyrics from LRCLIB")
-                    .font(.system(size: 10 * scale, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.3))
+                LyricsSourceView(source: source, track: track, scale: scale)
                     .padding(.top, 8 * scale)
             }
             .padding(.vertical, 12 * scale)
@@ -381,5 +388,35 @@ private struct PlainLyricsView: View {
                                    .init(color: .black, location: 0.9), .init(color: .clear, location: 1)],
                            startPoint: .top, endPoint: .bottom)
         }
+    }
+}
+
+/// Under the lyrics: where they come from, and a way to use a file of one's own instead.
+private struct LyricsSourceView: View {
+    let source: LyricsService.Source
+    let track: Track
+    let scale: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6 * scale) {
+            switch source {
+            case .lrclib:
+                Text("Lyrics from LRCLIB")
+                Text(verbatim: "·")
+                Button("Use your own…") { UserLyricsStore.choose(for: track) }
+                    .help(Text("Choose a lyrics file for this song: LRC with timing, or plain text."))
+            case .file:
+                Text("Your lyrics file")
+                Text(verbatim: "·")
+                Button("Remove") {
+                    UserLyricsStore.remove(for: track)
+                    LyricsService.shared.reload(for: track)
+                }
+                .help(Text("Move this song's lyrics file to the Trash and look the song up in LRCLIB again."))
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 10 * scale, weight: .medium))
+        .foregroundStyle(.white.opacity(0.3))
     }
 }

@@ -108,6 +108,17 @@ struct LyricsTests {
         #expect(LRCLIB.parseSearch(Data(json.utf8), duration: 200) == nil)
         #expect(LRCLIB.parseSearch(Data("[]".utf8), duration: 200) == nil)
     }
+
+    @Test func syncedLyricsFromTheSearchBeatAPlainExactMatch() {
+        let synced = Lyrics.synced(LRCParser.parse("[00:04.00]Line"))
+        let plain = Lyrics.plain(["Line"])
+        #expect(LRCLIB.preferred(exact: plain, searched: synced) == synced)
+        #expect(LRCLIB.preferred(exact: .instrumental, searched: synced) == synced)
+        #expect(LRCLIB.preferred(exact: synced, searched: .plain(["Other"])) == synced)
+        #expect(LRCLIB.preferred(exact: plain, searched: .plain(["Other"])) == plain)
+        #expect(LRCLIB.preferred(exact: nil, searched: plain) == plain)
+        #expect(LRCLIB.preferred(exact: plain, searched: nil) == plain)
+    }
 }
 
 @Suite("Word timing")

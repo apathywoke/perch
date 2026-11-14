@@ -297,6 +297,13 @@ public enum LRCLIB {
         return lyrics(from: record)
     }
 
+    /// The exact match unless it lacks timing and the search found lyrics with it.
+    public static func preferred(exact: Lyrics?, searched: Lyrics?) -> Lyrics? {
+        if case .synced = exact { return exact }
+        if case .synced = searched { return searched }
+        return exact ?? searched
+    }
+
     /// Picks the best search result: synced over plain, then the closest length.
     public static func parseSearch(_ data: Data, duration: Double) -> Lyrics? {
         guard let records = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }

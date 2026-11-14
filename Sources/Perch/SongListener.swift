@@ -21,6 +21,8 @@ final class SongListener: ObservableObject {
         case off
         case needsNewerSystem
         case waiting
+        /// Listening happens only while the lyrics are on screen.
+        case lyricsClosed
         case unsupportedLanguage(String)
         case preparing
         case listening
@@ -50,6 +52,8 @@ final class SongListener: ObservableObject {
     private var engine: AnyObject? // ListeningEngine on macOS 26
     private var engineKey: String?
     private var languages: [String: Recognizer?] = [:]
+    private var lyricsVisible = false
+    private var hideWork: DispatchWorkItem?
 
     /// Which system recogniser hears the song: the dictation model, which knows
     /// more languages and times words better, or else the newer speech model.
@@ -91,6 +95,24 @@ final class SongListener: ObservableObject {
         evaluate()
     }
 
+    /// The lyrics came on screen or left it. Closing the island for a moment
+    /// (the pointer slipping off it) does not stop listening; a while does.
+    func lyricsShown(_ shown: Bool) {
+        hideWork?.cancel()
+        hideWork = nil
+        if shown {
+            lyricsVisible = true
+            evaluate()
+        } else {
+            let work = DispatchWorkItem { [weak self] in
+                self?.lyricsVisible = false
+                self?.evaluate()
+            }
+            hideWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: work)
+        }
+    }
+
     // MARK: Deciding
 
     private func evaluate() {
@@ -105,23 +127,26 @@ final class SongListener: ObservableObject {
         }
         let track = MediaService.shared.track
         if let track { switchSong(to: track.id) }
+        guard lyricsVisible else {
+            stopEngine()
+            if status != .lyricsClosed { status = .lyricsClosed }
+            return
+        }
         guard let track, let bundleId = track.bundleId,
-              let lines = LyricsService.shared.baseLines(for: track.id),
-              !lines.allSatisfy({ $0.wordSynced || $0.text.isEmpty }) else {
+              let lyrics = LyricsService.shared.listenable(for: track.id) else {
             stopEngine()
             if case .failed = status {} else { status = .waiting }
             return
         }
-        if let first = lines.first(where: { !$0.text.isEmpty })?.time, let last = lines.last?.time,
-           transcript.coverage(from: first, to: last + 3) >= 0.9 {
+        if let span = lyrics.span, transcript.coverage(from: span.lowerBound, to: span.upperBound) >= 0.9 {
             stopEngine()
             status = .learned
             return
         }
-        guard let recognizer = language(of: track.id, lines: lines) else {
+        guard let recognizer = language(of: track.id, text: lyrics.text) else {
             stopEngine()
             if case .unsupportedLanguage = status {} else {
-                status = .unsupportedLanguage(Self.languageName(lines))
+                status = .unsupportedLanguage(Self.languageName(lyrics.text))
             }
             return
         }
@@ -152,11 +177,10 @@ final class SongListener: ObservableObject {
     }
 
     /// The language of the lyrics, if the recogniser knows it; checked once per song.
-    private func language(of id: String, lines: [LyricLine]) -> Recognizer? {
+    private func language(of id: String, text: String) -> Recognizer? {
         if let known = languages[id] { return known }
         guard #available(macOS 26.0, *) else { return nil }
         languages[id] = .some(nil)
-        let text = lines.map(\.text).joined(separator: "\n")
         Task { @MainActor in
             let speech = await SpeechTranscriber.supportedLocales
             let dictation = await DictationTranscriber.supportedLocales
@@ -196,9 +220,9 @@ final class SongListener: ObservableObject {
         return nil
     }
 
-    private static func languageName(_ lines: [LyricLine]) -> String {
+    private static func languageName(_ text: String) -> String {
         let recognizer = NLLanguageRecognizer()
-        recognizer.processString(lines.map(\.text).joined(separator: "\n"))
+        recognizer.processString(text)
         guard let code = recognizer.dominantLanguage?.rawValue else { return "?" }
         return Locale.current.localizedString(forLanguageCode: code) ?? code
     }
@@ -290,7 +314,8 @@ final class SongListener: ObservableObject {
         let state = switch status {
         case .off: "off"
         case .needsNewerSystem: "needs macOS 26"
-        case .waiting: "waiting for synced lyrics"
+        case .waiting: "waiting for lyrics"
+        case .lyricsClosed: "lyrics not on screen"
         case .unsupportedLanguage(let name): "language not supported (\(name))"
         case .preparing: "preparing"
         case .listening: "listening"
