@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         AudioOutputs.shared.start()
         Updater.shared.start()
         SongListener.shared.start()
+        ActivityCenter.shared.start()
         updateStatusItem()
         SystemHUD.shared.sync()
         if Pref.bool(Pref.onboardingDone) {

@@ -10,6 +10,13 @@ public enum HUDStyle: String, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+/// How big events (Focus, headphones…) appear: a strip beside the notch, or a
+/// card the island opens into, as it does for the player.
+public enum EventSize: String, CaseIterable, Identifiable {
+    case compact, large
+    public var id: String { rawValue }
+}
+
 /// All island measurements, in points.
 public enum NotchLayout {
     /// Radius of the concave corners that blend the island into the screen edge.
@@ -26,6 +33,13 @@ public enum NotchLayout {
     // Volume and brightness indicator.
     public static let hudWing: CGFloat = 96
     public static let hudRow: CGFloat = 36
+
+    // Events: Focus, charging, headphones, Caps Lock, microphone and camera.
+    public static let eventWing: CGFloat = 118
+    /// Height of the event card below the notch, before scaling.
+    public static let eventCardRow: CGFloat = 80
+    /// Added on each side of a bare notch while the microphone or camera is in use, for the dot.
+    public static let privacyWing: CGFloat = 16
 
     /// The island's resting size on displays without a notch.
     public static let virtualNotch = CGSize(width: 184, height: 32)
@@ -96,23 +110,44 @@ public enum NotchLayout {
         }
     }
 
+    public static func eventSize(style: HUDStyle, notch: CGSize, hasNotch: Bool) -> CGSize {
+        if !hasNotch { return CGSize(width: 300, height: notch.height) }
+        switch style {
+        case .beside: return CGSize(width: notch.width + 2 * eventWing, height: notch.height)
+        case .below: return CGSize(width: max(notch.width + 2 * wing(notch), 330), height: notch.height + hudRow)
+        }
+    }
+
+    /// The card an event opens the island into.
+    public static func eventCardSize(notch: CGSize, hasNotch: Bool, scale s: CGFloat) -> CGSize {
+        CGSize(width: max(360 * s, notch.width + 2 * 84 * s),
+               height: (hasNotch ? notch.height : 0) + eventCardRow * s)
+    }
+
     /// The island's size, without the ears.
     /// - Parameters:
     ///   - hud: style of the volume or brightness indicator on screen, if any.
+    ///   - event: style of an event strip on screen (Focus, charging…), if any and no indicator is.
+    ///   - eventCard: an event is shown as a card instead.
+    ///   - privacy: the microphone or camera is in use; a bare notch grows a little for the dot.
     ///   - swell: the pointer rests on the collapsed island.
     ///   - lyricsHeight: room for lyrics under the controls of the open player; 0 for none.
     public static func size(phase: IslandPhase, notch: CGSize, hasNotch: Bool, active: Bool, scale: CGFloat,
-                            hud: HUDStyle? = nil, swell: Bool = false, lyricsHeight: CGFloat = 0) -> CGSize {
+                            hud: HUDStyle? = nil, event: HUDStyle? = nil, eventCard: Bool = false, privacy: Bool = false,
+                            swell: Bool = false, lyricsHeight: CGFloat = 0) -> CGSize {
         if phase == .expanded {
             let player = player(notch: notch, hasNotch: hasNotch, scale: scale)
             return CGSize(width: player.width,
                           height: player.height + max(0, lyricsHeight) + (hud == nil ? 0 : player.hudRow))
         }
         if let hud { return hudSize(style: hud, notch: notch, hasNotch: hasNotch) }
+        if eventCard { return eventCardSize(notch: notch, hasNotch: hasNotch, scale: scale) }
+        if let event { return eventSize(style: event, notch: notch, hasNotch: hasNotch) }
         if phase == .peek, active {
             return CGSize(width: max(notch.width + 2 * peekSide, 330), height: notch.height + peekRow)
         }
         var size = active ? CGSize(width: notch.width + 2 * wing(notch), height: notch.height) : notch
+        if privacy, !active { size.width += 2 * privacyWing }
         if swell, phase == .collapsed {
             size.width += hoverGrowth.width
             size.height += hoverGrowth.height

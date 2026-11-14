@@ -21,6 +21,10 @@ final class NotchModel: ObservableObject {
     @Published var prepared = false
     /// Volume / brightness indicator currently shown, if any.
     @Published var hud: HUDState?
+    /// Event shown for a moment (Focus, charging, headphones…), if any.
+    @Published var event: IslandEvent?
+    /// Microphone or camera in use: a dot stays on the island.
+    @Published var privacy = PrivacyUse()
     /// The open player shows lyrics (only while the feature is on).
     @Published var showLyrics = Pref.bool(Pref.lyricsOpen)
 }
@@ -62,6 +66,7 @@ final class NotchController {
     private var closeWork: DispatchWorkItem?
     private var peekWork: DispatchWorkItem?
     private var hudWork: DispatchWorkItem?
+    private var eventWork: DispatchWorkItem?
     private var pauseWork: DispatchWorkItem?
     /// The island is open and showing lyrics. Spotify's position is checked and
     /// the song listened to only then: nobody sees the timing otherwise.
@@ -186,7 +191,7 @@ final class NotchController {
         updateCaptureWatch()
         let active = track != nil && !pausedTooLong
         // The volume indicator stays even during a recording: it says nothing about the music.
-        let visible = model.hud != nil || !fullscreen && !capturing
+        let visible = model.hud != nil || model.event != nil || !fullscreen && !capturing
             && (geometry.hasNotch || (Pref.bool(Pref.showOnNonNotch) && (active || model.phase == .expanded)))
 
         let frame = CGRect(x: screen.frame.midX - Self.panelSize.width / 2,
@@ -340,6 +345,7 @@ final class NotchController {
         let fresh = model.hud == nil
         withAnimation(fresh ? Motion.grow : Motion.update) {
             model.hud = state
+            model.event = nil
             model.visible = true
             if model.phase == .peek { model.phase = .collapsed }
         }
@@ -353,6 +359,42 @@ final class NotchController {
         hudWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0.5, Pref.double(Pref.hudDuration)), execute: work)
         evaluateMouse()
+    }
+
+    // MARK: Events
+
+    /// Shows an event for a moment. Not over the open player, where the user
+    /// is busy with the music, nor over a full-screen app or a recording.
+    func showEvent(_ event: IslandEvent) {
+        guard model.phase != .expanded, model.hud == nil, !fullscreen, !capturing else { return }
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested, userInfo: [
+            .announcement: event.spokenDescription,
+            .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+        ])
+        withAnimation(model.event == nil ? Motion.grow : Motion.update) {
+            model.event = event
+            model.visible = true
+            if model.phase == .peek { model.phase = .collapsed }
+        }
+        cachedHitRect = nil
+        eventWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            withAnimation(Motion.shrink) { self?.model.event = nil }
+            self?.refresh(spaces: false)
+        }
+        eventWork = work
+        // A card holds more to read, and takes longer to open, than a strip.
+        let card = Pref.value(Pref.eventSize, EventSize.large) == .large
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(card ? 2.8 : 2.2, Pref.double(Pref.hudDuration) + 0.6),
+                                      execute: work)
+        evaluateMouse()
+    }
+
+    /// The microphone or camera started or stopped being used.
+    func setPrivacy(_ use: PrivacyUse) {
+        guard model.privacy != use else { return }
+        withAnimation(use.any ? Motion.grow : Motion.shrink) { model.privacy = use }
+        cachedHitRect = nil
     }
 
     /// The system indicator is announced by VoiceOver; ours has to be too.
@@ -427,10 +469,15 @@ final class NotchController {
 
     private func computeHitRect() -> CGRect {
         guard let screen, model.visible else { return .zero }
+        let eventCard = model.event != nil && model.hud == nil && Pref.value(Pref.eventSize, EventSize.large) == .large
         // While hovered, the swollen island counts, so the edge does not flicker.
         let size = NotchLayout.size(phase: model.phase, notch: model.notchSize, hasNotch: model.hasNotch,
                                     active: model.active, scale: Pref.double(Pref.scale),
                                     hud: model.hud == nil ? nil : Pref.value(Pref.hudStyle, HUDStyle.beside),
+                                    event: model.event == nil || model.hud != nil || eventCard
+                                        ? nil : Pref.value(Pref.hudStyle, HUDStyle.beside),
+                                    eventCard: eventCard,
+                                    privacy: model.privacy.any && model.hud == nil && model.event == nil,
                                     swell: model.hovering && !Motion.reduced,
                                     lyricsHeight: LyricsSpace.currentHeight(scale: Pref.double(Pref.scale)))
         let pad: CGFloat = model.phase == .expanded ? 12 : 0

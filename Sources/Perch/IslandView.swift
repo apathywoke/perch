@@ -37,6 +37,7 @@ struct IslandView: View {
     @AppStorage(Pref.shadow) private var shadow = true
     @AppStorage(Pref.hudStyle) private var hudStyle = HUDStyle.beside
     @AppStorage(Pref.swapSides) private var swapSides = false
+    @AppStorage(Pref.eventSize) private var eventSize = EventSize.large
     @AppStorage(Pref.visualizer) private var visualizer = true
     @AppStorage(Pref.lyricsEnabled) private var lyricsEnabled = false
     @AppStorage(Pref.lyricsSpace) private var lyricsSpace = LyricsSpace.medium
@@ -50,22 +51,28 @@ struct IslandView: View {
         let notch = model.notchSize
         let expanded = model.phase == .expanded
         let hud = expanded ? nil : model.hud
-        let card = model.phase == .peek && hud == nil && model.active
-        let tall = hud != nil && model.hasNotch && hudStyle == .below
-        let swell = model.hovering && !reduceMotion && model.phase == .collapsed && hud == nil
+        let event = expanded || hud != nil ? nil : model.event
+        let card = model.phase == .peek && hud == nil && event == nil && model.active
+        // A large event opens the island into a card, like the player.
+        let eventCard = event != nil && eventSize == .large
+        let tall = (hud != nil || (event != nil && !eventCard)) && model.hasNotch && hudStyle == .below
+        let swell = model.hovering && !reduceMotion && model.phase == .collapsed && hud == nil && event == nil
+        let privacy = !expanded && hud == nil && event == nil && model.privacy.any
         let size = NotchLayout.size(phase: model.phase, notch: notch, hasNotch: model.hasNotch, active: model.active,
-                                    scale: s, hud: model.hud == nil ? nil : hudStyle, swell: swell,
+                                    scale: s, hud: model.hud == nil ? nil : hudStyle,
+                                    event: event == nil || eventCard ? nil : hudStyle, eventCard: eventCard,
+                                    privacy: privacy, swell: swell,
                                     lyricsHeight: lyricsHeight)
         let player = NotchLayout.player(notch: notch, hasNotch: model.hasNotch, scale: s)
         let collapsed = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: model.hasNotch,
                                          active: model.active, scale: s)
-        let ear: CGFloat = expanded ? 20 : ((card || tall) ? 10 : NotchLayout.earRadius)
-        let bottom: CGFloat = expanded ? 32 * s : ((card || tall) ? 24 : (swell ? 14 : 10))
+        let ear: CGFloat = expanded ? 20 : (eventCard ? 18 : ((card || tall) ? 10 : NotchLayout.earRadius))
+        let bottom: CGFloat = expanded ? 32 * s : (eventCard ? 28 * s : ((card || tall) ? 24 : (swell ? 14 : 10)))
         let shape = NotchShape(topRadius: ear, bottomRadius: bottom)
 
         // Artwork and visualizer are single views that travel between the
         // collapsed island, the track card and the open player.
-        let showMedia = hud == nil && (expanded ? media.track != nil : model.active)
+        let showMedia = hud == nil && event == nil && (expanded ? media.track != nil : model.active)
         let side: CGFloat = swapSides ? 1 : -1
         let wingCenter = notch.width / 2 + (size.width - notch.width) / 4
         let smallArt = (notch.height * 0.56).rounded() * (swell ? 1.1 : 1)
@@ -85,7 +92,7 @@ struct IslandView: View {
 
         ZStack(alignment: .top) {
             shape.fill(.black)
-                .shadow(color: .black.opacity(expanded && shadow ? 0.38 : 0), radius: 22, y: 10)
+                .shadow(color: .black.opacity((expanded || eventCard) && shadow ? 0.38 : 0), radius: 22, y: 10)
 
             ZStack(alignment: .top) {
                 // The open player stays built while the island is closed, hidden and
@@ -103,6 +110,12 @@ struct IslandView: View {
                         HUDView(state: hud, layout: hudLayout(notch: notch), tint: media.tint)
                             .frame(width: size.width, height: size.height, alignment: .top)
                             .transition(contentTransition(from: 0.9))
+                    } else if let event {
+                        EventView(event: event, layout: eventCard
+                                  ? .card(top: model.hasNotch ? notch.height : 0, scale: s)
+                                  : .compact(eventLayout(notch: notch)))
+                            .frame(width: size.width, height: size.height, alignment: .top)
+                            .transition(contentTransition(from: eventCard ? 0.94 : 0.9))
                     } else if card, let track = media.track {
                         PeekView(track: track)
                             .padding(.top, notch.height)
@@ -156,6 +169,14 @@ struct IslandView: View {
                     .offset(x: barsX, y: barsY)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
+
+                // Microphone or camera in use: a dot at the island's right end.
+                if privacy {
+                    PrivacyDot(use: model.privacy)
+                        .offset(x: size.width / 2 - 8, y: size.height / 2 - 3)
+                        .transition(.scale.combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
             }
             .frame(width: size.width, height: size.height, alignment: .top)
             .clipShape(NotchShape(topRadius: 0, bottomRadius: bottom))
@@ -185,6 +206,12 @@ struct IslandView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+    }
+
+    private func eventLayout(notch: CGSize) -> HUDLayout {
+        guard model.hasNotch else { return .plain(height: notch.height) }
+        return hudStyle == .beside ? .beside(wing: NotchLayout.eventWing, height: notch.height)
+                                   : .below(notchHeight: notch.height)
     }
 
     private func hudLayout(notch: CGSize) -> HUDLayout {
@@ -333,7 +360,7 @@ private struct PeekView: View {
 
 // MARK: - Volume / brightness indicator
 
-private enum HUDLayout {
+enum HUDLayout {
     /// Icon in the left wing, level in the right wing, nothing under the notch.
     case beside(wing: CGFloat, height: CGFloat)
     /// A row below the notch.

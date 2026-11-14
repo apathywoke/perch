@@ -310,3 +310,35 @@
 "The file could not be read as text." = "Файл не читается как текст.";
 "The file has no lyrics in it." = "В файле нет текста.";
 "Listens while the lyrics are open" = "Слушает, пока открыт текст";
+
+/* Events in the island */
+"Indicators" = "Индикаторы";
+"Volume, brightness and what happens on your Mac, in the island." = "Громкость, яркость и события на Mac — в острове.";
+"switch.on" = "Вкл";
+"switch.off" = "Выкл";
+"Charging" = "Зарядка";
+"On battery" = "От батареи";
+"Low battery" = "Низкий заряд";
+"Connected" = "Подключены";
+"Disconnected" = "Отключены";
+"Microphone" = "Микрофон";
+"Camera" = "Камера";
+"In use" = "Используется";
+"Microphone in use" = "Используется микрофон";
+"Camera in use" = "Используется камера";
+"Events" = "События";
+"Focus turned on or off" = "Включение и выключение Фокуса";
+"Charging and low battery" = "Зарядка и низкий заряд";
+"Headphones connected" = "Подключение наушников";
+"Microphone and camera in use" = "Использование микрофона и камеры";
+"Focus and Caps Lock need the same Accessibility access as the volume indicator." = "Для Фокуса и Caps Lock нужен тот же доступ к Универсальному доступу, что и для индикатора громкости.";
+"Focus" = "Фокус";
+"Headphones" = "Наушники";
+"Do Not Disturb" = "Не беспокоить";
+"Shown for a moment in the island, with a small animation; the microphone or a camera in use also leaves a dot on the island, as on iPhone. The Focus is read from the menu bar, where macOS shows it while it is on; Perch only notices whether Caps Lock is on, and that the microphone or a camera is in use, without hearing or seeing anything. Nothing leaves your Mac." = "Ненадолго показываются в острове с небольшой анимацией. Пока используется микрофон или камера, на острове горит точка, как на iPhone. Фокус Perch узнаёт из строки меню, где macOS показывает его, пока он включён. Perch замечает только, включён ли Caps Lock и используются ли микрофон или камера, ничего не слыша и не видя. С Mac ничего не уходит.";
+"eventSize.compact" = "Компактно";
+"eventSize.large" = "Крупно";
+"Power adapter connected" = "Подключено питание";
+"Power adapter disconnected" = "Питание отключено";
+"Connect the charger" = "Подключите зарядку";
+"Used by %@" = "Использует %@";

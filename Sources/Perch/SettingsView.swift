@@ -13,7 +13,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "General"
         case .behavior: "Behavior"
         case .appearance: "Appearance"
-        case .indicators: "Volume & Brightness"
+        case .indicators: "Indicators"
         case .sources: "Music Sources"
         case .lyrics: "Lyrics"
         case .shortcuts: "Shortcuts"
@@ -26,7 +26,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "Startup, menu bar and where the island appears."
         case .behavior: "How the island opens, closes and reacts to you."
         case .appearance: "Size, motion and the look of the player."
-        case .indicators: "Volume and brightness in the island instead of the system indicators."
+        case .indicators: "Volume, brightness and what happens on your Mac, in the island."
         case .sources: "Which apps the island follows."
         case .lyrics: "Song lyrics in the island, as in Apple Music."
         case .shortcuts: "Control the music from any app."
@@ -339,6 +339,12 @@ private struct IndicatorsPane: View {
     @AppStorage(Pref.hudPercent) private var percent = true
     @AppStorage(Pref.hudColor) private var color = VisualizerColor.white
     @AppStorage(Pref.hudDuration) private var duration = 1.6
+    @AppStorage(Pref.eventFocus) private var focus = true
+    @AppStorage(Pref.eventPower) private var power = true
+    @AppStorage(Pref.eventHeadphones) private var headphones = true
+    @AppStorage(Pref.eventCapsLock) private var capsLock = true
+    @AppStorage(Pref.eventPrivacy) private var privacy = true
+    @AppStorage(Pref.eventSize) private var eventSize = EventSize.large
 
     var body: some View {
         Form {
@@ -398,7 +404,49 @@ private struct IndicatorsPane: View {
                     }
                 }
             }
+            Section {
+                TilePicker(selection: $eventSize, options: EventSize.allCases.map { option in
+                    TileOption(value: option, title: option.title) { EventSizeIllustration(size: option) }
+                })
+                Toggle("Focus turned on or off", isOn: $focus)
+                Toggle("Charging and low battery", isOn: $power)
+                Toggle("Headphones connected", isOn: $headphones)
+                Toggle("Caps Lock", isOn: $capsLock)
+                Toggle("Microphone and camera in use", isOn: $privacy)
+                if (focus || capsLock), !hud.trusted {
+                    Label {
+                        Text("Focus and Caps Lock need the same Accessibility access as the volume indicator.")
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
+                    LabeledContent("") {
+                        Button("Open System Settings") { hud.requestAccess() }
+                    }
+                }
+                LabeledContent("") {
+                    Menu("Preview") {
+                        Button("Focus") { preview(.focus(name: NSLocalizedString("Do Not Disturb", comment: ""), on: true)) }
+                        Button("Charging") { preview(.power(.pluggedIn(level: 0.62))) }
+                        Button("Low battery") { preview(.power(.low(level: 0.1))) }
+                        Button("Headphones") {
+                            preview(.headphones(name: "AirPods Pro", symbol: "airpodspro", connected: true))
+                        }
+                        Button("Caps Lock") { preview(.capsLock(on: true)) }
+                        Button("Microphone") { preview(.microphone(app: nil)) }
+                        Button("Camera") { preview(.camera) }
+                    }
+                    .fixedSize()
+                }
+            } header: {
+                Text("Events")
+            } footer: {
+                Text("Shown for a moment in the island, with a small animation; the microphone or a camera in use also leaves a dot on the island, as on iPhone. The Focus is read from the menu bar, where macOS shows it while it is on; Perch only notices whether Caps Lock is on, and that the microphone or a camera is in use, without hearing or seeing anything. Nothing leaves your Mac.")
+            }
         }
+    }
+
+    private func preview(_ kind: IslandEvent.Kind) {
+        NotchController.shared.showEvent(IslandEvent(kind: kind))
     }
 }
 
@@ -983,6 +1031,59 @@ private struct SwatchPicker: View {
 }
 
 /// A tiny drawing of where the volume indicator appears.
+extension EventSize {
+    /// Own keys: "Large" alone is already the lyrics text size, with another ending in Russian.
+    var title: LocalizedStringKey {
+        switch self {
+        case .compact: LocalizedStringKey(NSLocalizedString("eventSize.compact", value: "Compact", comment: ""))
+        case .large: LocalizedStringKey(NSLocalizedString("eventSize.large", value: "Large", comment: ""))
+        }
+    }
+}
+
+/// A strip beside the notch, or the island opened into a card.
+private struct EventSizeIllustration: View {
+    let size: EventSize
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(LinearGradient(colors: [Color.indigo.opacity(0.7), Color.purple.opacity(0.45)],
+                                     startPoint: .top, endPoint: .bottom))
+            switch size {
+            case .compact:
+                HStack(spacing: 0) {
+                    Image(systemName: "moon.fill")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(Color(red: 0.6, green: 0.55, blue: 1))
+                        .frame(width: 26)
+                    Spacer(minLength: 30)
+                    Capsule().fill(Color(red: 0.6, green: 0.55, blue: 1)).frame(width: 16, height: 3).frame(width: 26)
+                }
+                .frame(width: 104, height: 14)
+                .background(UnevenRoundedRectangle(bottomLeadingRadius: 5, bottomTrailingRadius: 5).fill(.black))
+            case .large:
+                HStack(spacing: 6) {
+                    Image(systemName: "moon.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(red: 0.6, green: 0.55, blue: 1))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Capsule().fill(.white).frame(width: 34, height: 3)
+                        Capsule().fill(Color(red: 0.6, green: 0.55, blue: 1)).frame(width: 18, height: 3)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .frame(width: 96, height: 38, alignment: .top)
+                .background(UnevenRoundedRectangle(bottomLeadingRadius: 11, bottomTrailingRadius: 11).fill(.black))
+            }
+        }
+        .frame(width: 128, height: 44)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
 private struct HUDStyleIllustration: View {
     let style: HUDStyle
 

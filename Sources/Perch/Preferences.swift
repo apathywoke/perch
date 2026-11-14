@@ -40,6 +40,12 @@ enum Pref {
     static let hudColor = "hudColor"
     static let hudDuration = "hudDuration"
     static let hudAskedForAccess = "hudAskedForAccess"
+    static let eventFocus = "eventFocus"
+    static let eventPower = "eventPower"
+    static let eventHeadphones = "eventHeadphones"
+    static let eventCapsLock = "eventCapsLock"
+    static let eventPrivacy = "eventPrivacy"
+    static let eventSize = "eventSize"
     // Sources
     static let ignoredSources = "ignoredSources"
     static let knownSources = "knownSources"
@@ -94,6 +100,12 @@ enum Pref {
         hudPercent: true,
         hudColor: VisualizerColor.white.rawValue,
         hudDuration: 1.6,
+        eventFocus: true,
+        eventPower: true,
+        eventHeadphones: true,
+        eventCapsLock: true,
+        eventPrivacy: true,
+        eventSize: EventSize.large.rawValue,
         fallbackSources: true,
         updateChecks: false,
         lyricsEnabled: false,
