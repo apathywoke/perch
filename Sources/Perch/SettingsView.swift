@@ -1029,13 +1029,20 @@ private struct IslandPreview: View {
     @ObservedObject private var media = MediaService.shared
     @AppStorage(Pref.scale) private var scale = 1.0
     @AppStorage(Pref.hudStyle) private var hudStyle = HUDStyle.beside
+    @AppStorage(Pref.lyricsEnabled) private var lyricsEnabled = false
+    @AppStorage(Pref.lyricsSpace) private var lyricsSpace = LyricsSpace.medium
+    @AppStorage(Pref.lyricsSize) private var lyricsSize = LyricsSize.medium
 
     private static let zoom: CGFloat = 0.8
 
-    /// Tall enough for the island in its current state, so no empty desktop is left.
+    /// Tall enough for the island in its current state, lyrics included, so
+    /// no empty desktop is left and the island never spills over the picker.
     private var height: CGFloat {
+        let lyrics = model.showLyrics && lyricsEnabled
+            ? NotchLayout.lyricsHeight(lines: lyricsSpace.lines, fontSize: lyricsSize.points * scale) : 0
         let island = NotchLayout.size(phase: model.phase, notch: model.notchSize, hasNotch: model.hasNotch,
-                                      active: true, scale: scale, hud: model.hud == nil ? nil : hudStyle)
+                                      active: true, scale: scale, hud: model.hud == nil ? nil : hudStyle,
+                                      lyricsHeight: lyrics)
         return island.height * Self.zoom + 34
     }
 
@@ -1047,6 +1054,8 @@ private struct IslandPreview: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                // Above the preview: the island's AppKit scrubber ignores allowsHitTesting.
+                .zIndex(1)
             }
             ZStack(alignment: .top) {
                 LinearGradient(colors: [Color(red: 0.18, green: 0.2, blue: 0.55), Color(red: 0.46, green: 0.23, blue: 0.6),

@@ -35,6 +35,10 @@ final class LyricsService: ObservableObject {
             return
         }
         guard track.id != currentId else { return }
+        if track.bundleId == MediaService.previewBundleId {
+            showWithoutFetching(MediaService.previewLyrics, for: track) // the sample song in Settings
+            return
+        }
         currentId = track.id
         if let cached = cache[track.id] {
             show(cached, for: track)

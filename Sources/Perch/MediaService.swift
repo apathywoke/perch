@@ -386,10 +386,28 @@ final class MediaService: ObservableObject {
 
     /// A service that never starts the helper and shows a sample song, for the
     /// island preview in Settings when nothing is playing.
+    /// Marks the sample song, so nothing is ever looked up for it.
+    static let previewBundleId = "dev.perch.Perch.preview"
+
+    /// Lyrics for the sample song, timed around its position.
+    static let previewLyrics = Lyrics.synced(LRCParser.parse("""
+        [00:52.00]Streetlights hum a quiet tune
+        [00:56.00]Paper boats on a silver lake
+        [01:00.00]We kept the window open wide
+        [01:04.50]And let the evening in
+        [01:09.00]Every song we never wrote
+        [01:11.50]Is waiting in the rain
+        [01:17.50]
+        [01:21.00]So hold the note a little longer
+        [01:25.00]Before the morning comes
+        [01:29.00]Hold the note
+        """))
+
     static func preview() -> MediaService {
         let service = MediaService()
         service.track = Track(title: NSLocalizedString("Song title", comment: "preview"),
                               artist: NSLocalizedString("Artist", comment: "preview"),
+                              bundleId: previewBundleId,
                               duration: 214, elapsed: 71, timestamp: Date(), isPlaying: true)
         service.artwork = previewArtwork()
         service.artworkKey = "preview"

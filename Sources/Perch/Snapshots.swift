@@ -53,20 +53,8 @@ enum Snapshots {
         app.appearance = NSAppearance(named: .darkAqua)
         Pref.register()
         let media = MediaService.preview()
-        let lrc = """
-        [00:52.00]Streetlights hum a quiet tune
-        [00:56.00]Paper boats on a silver lake
-        [01:00.00]We kept the window open wide
-        [01:04.50]And let the evening in
-        [01:09.00]Every song we never wrote
-        [01:11.50]Is waiting in the rain
-        [01:17.50]
-        [01:21.00]So hold the note a little longer
-        [01:25.00]Before the morning comes
-        [01:29.00]Hold the note
-        """
         if let track = media.track {
-            LyricsService.shared.showWithoutFetching(.synced(LRCParser.parse(lrc)), for: track)
+            LyricsService.shared.showWithoutFetching(MediaService.previewLyrics, for: track)
         }
         let model = NotchModel()
         model.notchSize = CGSize(width: 209, height: 38)
