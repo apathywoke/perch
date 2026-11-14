@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         MediaService.shared.start()
         NotchController.shared.start()
         HotkeyCenter.shared.registerAll()
+        AudioOutputs.shared.start()
         updateStatusItem()
         SystemHUD.shared.sync()
         if Pref.bool(Pref.onboardingDone) {

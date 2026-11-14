@@ -330,9 +330,11 @@ final class NotchController {
 
     private func computeHitRect() -> CGRect {
         guard let screen, model.visible else { return .zero }
+        // While hovered, the swollen island counts, so the edge does not flicker.
         let size = NotchLayout.size(phase: model.phase, notch: model.notchSize, hasNotch: model.hasNotch,
                                     active: model.active, scale: Pref.double(Pref.scale),
-                                    hud: model.hud == nil ? nil : Pref.value(Pref.hudStyle, HUDStyle.beside))
+                                    hud: model.hud == nil ? nil : Pref.value(Pref.hudStyle, HUDStyle.beside),
+                                    swell: model.hovering && !Motion.reduced)
         let pad: CGFloat = model.phase == .expanded ? 12 : 0
         return CGRect(x: screen.frame.midX - size.width / 2 - pad, y: screen.frame.maxY - size.height - pad,
                       width: size.width + pad * 2, height: size.height + pad + 2)
@@ -360,6 +362,7 @@ final class NotchController {
         let swell = inside && model.phase != .expanded
         if model.hovering != swell {
             withAnimation(Motion.swell) { model.hovering = swell }
+            cachedHitRect = nil
         }
 
         if inside {
@@ -378,11 +381,24 @@ final class NotchController {
         }
     }
 
+    private var holds = 0
+
+    /// Keeps the island open while `body` runs, e.g. a menu shown from one of its buttons.
+    func holdOpen(_ body: () -> Void) {
+        holds += 1
+        body()
+        holds -= 1
+        cachedHitRect = nil
+        evaluateMouse()
+        if !isInside, model.phase == .expanded { scheduleClose() }
+    }
+
     private func scheduleClose() {
         closeWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.isInside, self.model.phase == .expanded else { return }
-            if NSEvent.pressedMouseButtons != 0 { self.scheduleClose(); return } // mid-drag on the scrubber
+            // Mid-drag on the scrubber, or a menu opened from the island is still up.
+            if NSEvent.pressedMouseButtons != 0 || self.holds > 0 { self.scheduleClose(); return }
             self.collapse()
         }
         closeWork = work

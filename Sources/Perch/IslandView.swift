@@ -45,39 +45,37 @@ struct IslandView: View {
         let notch = model.notchSize
         let expanded = model.phase == .expanded
         let hud = expanded ? nil : model.hud
-        let tall = hud != nil && model.hasNotch && hudStyle == .below
         let card = model.phase == .peek && hud == nil && model.active
-        let peek = card || tall
-        let size = NotchLayout.size(phase: model.phase, notch: notch, hasNotch: model.hasNotch,
-                                    active: model.active, scale: s, hud: hud == nil ? nil : hudStyle)
-        let full = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: model.hasNotch,
-                                    active: model.active, scale: s)
+        let tall = hud != nil && model.hasNotch && hudStyle == .below
+        let swell = model.hovering && !reduceMotion && model.phase == .collapsed && hud == nil
+        let size = NotchLayout.size(phase: model.phase, notch: notch, hasNotch: model.hasNotch, active: model.active,
+                                    scale: s, hud: model.hud == nil ? nil : hudStyle, swell: swell)
+        let player = NotchLayout.player(notch: notch, hasNotch: model.hasNotch, scale: s)
         let collapsed = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: model.hasNotch,
                                          active: model.active, scale: s)
-        let top = NotchLayout.topInset(hasNotch: model.hasNotch, notch: notch)
-        let ear: CGFloat = expanded ? 18 : (peek ? 10 : NotchLayout.earRadius)
-        let bottom: CGFloat = expanded ? 36 * s : (peek ? 24 : 10)
+        let ear: CGFloat = expanded ? 20 : ((card || tall) ? 10 : NotchLayout.earRadius)
+        let bottom: CGFloat = expanded ? 32 * s : ((card || tall) ? 24 : (swell ? 14 : 10))
         let shape = NotchShape(topRadius: ear, bottomRadius: bottom)
 
-        // Artwork and visualizer are single views that travel between their
-        // collapsed spot beside the notch and their place in the open player.
+        // Artwork and visualizer are single views that travel between the
+        // collapsed island, the track card and the open player.
         let showMedia = hud == nil && (expanded ? media.track != nil : model.active)
-        let wingCenter = notch.width / 2 + NotchLayout.wing(notch) / 2
         let side: CGFloat = swapSides ? 1 : -1
-        let smallArt = max(14, notch.height - 14)
-        let art = expanded ? NotchLayout.artwork * s : (card ? NotchLayout.peekArtwork : smallArt)
-        let artX = expanded ? -full.width / 2 + NotchLayout.inset * s + art / 2
+        let wingCenter = notch.width / 2 + (size.width - notch.width) / 4
+        let smallArt = (notch.height * 0.56).rounded() * (swell ? 1.1 : 1)
+        let art: CGFloat = expanded ? player.art : (card ? NotchLayout.peekArtwork : smallArt)
+        let artX: CGFloat = expanded ? -player.width / 2 + player.inset + art / 2
             : (card ? side * (size.width / 2 - NotchLayout.peekSide / 2) : side * wingCenter)
-        let artY = expanded ? top + NotchLayout.insetTop * s : (card ? (size.height - art) / 2 : (notch.height - smallArt) / 2)
-        let barsScale = (expanded ? 15 * s : (card ? 17 : smallArt * 0.62)) / VisualizerView.baseHeight
-        let barsX = expanded ? full.width / 2 - (NotchLayout.inset + 2) * s - VisualizerView.baseWidth * barsScale / 2
+        let artY: CGFloat = expanded ? player.artTop : (size.height - art) / 2
+        let barsScale = (expanded ? 14 * s : (card ? 17 : smallArt * 0.62)) / VisualizerView.baseHeight
+        let barsX: CGFloat = expanded
+            ? player.width / 2 - player.inset - 4 * s - VisualizerView.baseWidth * barsScale / 2
             : (card ? -side * (size.width / 2 - NotchLayout.peekSide / 2) : -side * wingCenter)
-        let barsY = (expanded ? top + (NotchLayout.insetTop + NotchLayout.artwork / 2) * s
-                     : (card ? size.height / 2 : notch.height / 2)) - VisualizerView.baseHeight / 2
+        let barsY = (expanded ? player.artTop + player.art / 2 : size.height / 2) - VisualizerView.baseHeight / 2
 
-        // The open player's content starts at the collapsed island's width and
-        // grows with it, so nothing is uncovered from the sides.
-        let growFrom = min(0.95, max(0.6, collapsed.width / full.width))
+        // The open player's content grows from the collapsed island's proportions.
+        let growFrom = CGSize(width: min(1, collapsed.width / player.width),
+                              height: min(1, collapsed.height / player.height))
 
         ZStack(alignment: .top) {
             shape.fill(.black)
@@ -85,12 +83,11 @@ struct IslandView: View {
 
             ZStack(alignment: .top) {
                 if expanded {
-                    ExpandedView(model: model, media: media, scale: s)
-                        .frame(width: full.width, height: full.height)
-                        .transition(contentTransition(from: growFrom))
+                    ExpandedView(model: model, media: media, metrics: player, scale: s)
+                        .frame(width: player.width, height: player.height)
+                        .transition(morphTransition(from: growFrom))
                 } else if let hud {
-                    HUDView(state: hud, style: hudStyle, notch: notch, hasNotch: model.hasNotch, tint: media.tint,
-                            wing: NotchLayout.hudWing)
+                    HUDView(state: hud, layout: hudLayout(notch: notch), tint: media.tint)
                         .frame(width: size.width, height: size.height, alignment: .top)
                         .transition(contentTransition(from: 0.9))
                 } else if card, let track = media.track {
@@ -101,28 +98,19 @@ struct IslandView: View {
                         .transition(contentTransition(from: 0.9))
                 }
 
-                if expanded, let state = model.hud, model.hasNotch {
-                    HUDView(state: state, style: .beside, notch: notch, hasNotch: true, tint: media.tint,
-                            wing: (full.width - notch.width) / 2)
-                        .frame(width: full.width, height: notch.height)
-                        .background(.black)
+                // While the player is open, the indicator gets its own row at the bottom.
+                if expanded, let state = model.hud {
+                    HUDView(state: state, layout: .plain(height: player.hudRow), tint: media.tint)
+                        .frame(width: player.width, height: player.hudRow)
+                        .offset(y: player.height - 10 * s)
                         .transition(contentTransition(from: 0.9))
-                        .zIndex(2)
                 }
 
-                ArtworkView(image: media.artwork, size: art, radius: art * 0.23)
-                    .overlay(alignment: .bottomTrailing) {
-                        if let icon = media.sourceIcon {
-                            Image(nsImage: icon).resizable()
-                                .frame(width: 20 * s, height: 20 * s)
-                                .offset(x: 6 * s, y: 6 * s)
-                                .scaleEffect(expanded ? 1 : 0.2, anchor: .bottomTrailing)
-                                .opacity(expanded ? 1 : 0)
-                        }
-                    }
+                ArtworkView(image: media.artwork, size: art, radius: art * (expanded ? 0.2 : 0.24))
                     .onTapGesture {
                         expanded ? media.openSourceApp() : NotchController.shared.collapsedClicked()
                     }
+                    .modifier(TravelBlur(progress: expanded ? 1 : 0, radius: reduceMotion ? 0 : 7))
                     .scaleEffect(showMedia ? 1 : 0.4)
                     .opacity(showMedia ? 1 : 0)
                     .offset(x: artX, y: artY)
@@ -132,6 +120,7 @@ struct IslandView: View {
                     .accessibilityHidden(!expanded || !showMedia)
 
                 VisualizerView(playing: media.track?.isPlaying == true, tint: media.tint)
+                    .modifier(TravelBlur(progress: expanded ? 1 : 0, radius: reduceMotion ? 0 : 4))
                     .scaleEffect(showMedia && visualizer ? barsScale : 0.3)
                     .opacity(showMedia && visualizer ? 1 : 0)
                     .offset(x: barsX, y: barsY)
@@ -143,7 +132,6 @@ struct IslandView: View {
         }
         .frame(width: size.width + ear * 2, height: size.height)
         .contentShape(shape)
-        .scaleEffect(model.hovering && !expanded && !reduceMotion ? 1.03 : 1, anchor: .top)
         .onTapGesture {
             if !expanded { NotchController.shared.collapsedClicked() }
         }
@@ -169,9 +157,26 @@ struct IslandView: View {
         .preferredColorScheme(.dark)
     }
 
-    /// Content grows in from slightly smaller and blurred a beat after the shape
-    /// starts to move, and leaves quickly before the shape closes over it.
+    private func hudLayout(notch: CGSize) -> HUDLayout {
+        guard model.hasNotch else { return .plain(height: notch.height) }
+        return hudStyle == .beside ? .beside(wing: NotchLayout.hudWing, height: notch.height)
+                                   : .below(notchHeight: notch.height)
+    }
+
+    /// The open player morphs out of the island: its content stays in place,
+    /// heavily blurred, and grows with the shape on the same spring, coming
+    /// into focus as the shape settles. Closing runs the same path backwards.
     /// With "Reduce motion" it only fades.
+    private func morphTransition(from start: CGSize) -> AnyTransition {
+        if reduceMotion {
+            return .asymmetric(insertion: .opacity.animation(Motion.contentIn),
+                               removal: .opacity.animation(Motion.contentOut))
+        }
+        return .modifier(active: Morph(progress: 0, from: start), identity: Morph(progress: 1, from: start))
+    }
+
+    /// Smaller content (indicator, track card): grows in from slightly smaller
+    /// and blurred, leaves quickly.
     private func contentTransition(from start: CGFloat) -> AnyTransition {
         if reduceMotion {
             return .asymmetric(insertion: .opacity.animation(Motion.contentIn),
@@ -186,6 +191,81 @@ struct IslandView: View {
         guard let track = media.track else { return Text("Nothing is playing") }
         let name = track.artist.isEmpty ? track.title : "\(track.title) — \(track.artist)"
         return track.isPlaying ? Text("Playing: \(name)") : Text("Paused: \(name)")
+    }
+}
+
+// MARK: - Motion helpers
+
+/// Drives the open player's content from the island's progress (0 closed, 1 open).
+private struct Morph: ViewModifier, Animatable {
+    var progress: CGFloat
+    let from: CGSize
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let p = min(max(progress, 0), 1.04) // the opening spring overshoots a touch
+        content
+            .scaleEffect(x: from.width + (1 - from.width) * p, y: from.height + (1 - from.height) * p, anchor: .top)
+            .blur(radius: 14 * max(0, 1 - p))
+            .opacity(Double(min(1, max(0, (p - 0.1) / 0.45))))
+    }
+}
+
+/// Blur that peaks halfway through a move and is gone at both ends.
+private struct TravelBlur: ViewModifier, Animatable {
+    var progress: CGFloat
+    let radius: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.blur(radius: radius * sin(.pi * min(max(progress, 0), 1)))
+    }
+}
+
+private struct BlurFade: ViewModifier {
+    let active: Bool
+    let scale: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(active ? scale : 1, anchor: .top)
+            .blur(radius: active ? 8 : 0)
+            .opacity(active ? 0 : 1)
+    }
+}
+
+/// Half of a card flip around the vertical axis.
+private struct Flip: ViewModifier {
+    let angle: Double
+
+    func body(content: Content) -> some View {
+        content
+            .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
+            .opacity(abs(angle) >= 90 ? 0 : 1)
+    }
+}
+
+private extension AnyTransition {
+    static func blurFade(scale: CGFloat) -> AnyTransition {
+        .modifier(active: BlurFade(active: true, scale: scale), identity: BlurFade(active: false, scale: scale))
+    }
+
+    /// The old artwork turns away, then the new one turns in.
+    static var flip: AnyTransition {
+        .asymmetric(
+            insertion: .modifier(active: Flip(angle: -90), identity: Flip(angle: 0))
+                .animation(.easeOut(duration: 0.22).delay(0.15)),
+            removal: .modifier(active: Flip(angle: 90), identity: Flip(angle: 0))
+                .animation(.easeIn(duration: 0.15))
+        )
     }
 }
 
@@ -210,33 +290,21 @@ private struct PeekView: View {
     }
 }
 
-private struct BlurFade: ViewModifier {
-    let active: Bool
-    let scale: CGFloat
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(active ? scale : 1, anchor: .top)
-            .blur(radius: active ? 8 : 0)
-            .opacity(active ? 0 : 1)
-    }
-}
-
-private extension AnyTransition {
-    static func blurFade(scale: CGFloat) -> AnyTransition {
-        .modifier(active: BlurFade(active: true, scale: scale), identity: BlurFade(active: false, scale: scale))
-    }
-}
-
 // MARK: - Volume / brightness indicator
+
+private enum HUDLayout {
+    /// Icon in the left wing, level in the right wing, nothing under the notch.
+    case beside(wing: CGFloat, height: CGFloat)
+    /// A row below the notch.
+    case below(notchHeight: CGFloat)
+    /// A plain row: displays without a notch, and the open player.
+    case plain(height: CGFloat)
+}
 
 private struct HUDView: View {
     let state: HUDState
-    let style: HUDStyle
-    let notch: CGSize
-    let hasNotch: Bool
+    let layout: HUDLayout
     let tint: Color
-    var wing: CGFloat = NotchLayout.hudWing
     @AppStorage(Pref.hudPercent) private var showPercent = true
     @AppStorage(Pref.hudColor) private var colorMode = VisualizerColor.white
 
@@ -244,7 +312,8 @@ private struct HUDView: View {
 
     var body: some View {
         Group {
-            if hasNotch, style == .beside {
+            switch layout {
+            case let .beside(wing, height):
                 HStack(spacing: 0) {
                     icon.frame(width: wing - 18, alignment: .leading).padding(.leading, 18)
                     Spacer(minLength: 0)
@@ -255,23 +324,27 @@ private struct HUDView: View {
                     .padding(.horizontal, 14)
                     .frame(width: wing)
                 }
-                .frame(height: notch.height)
-            } else {
+                .frame(height: height)
+            case let .below(notchHeight):
                 VStack(spacing: 0) {
-                    if hasNotch { Color.clear.frame(height: notch.height) }
-                    HStack(spacing: 12) {
-                        icon
-                        bar
-                        if showPercent { percent }
-                    }
-                    .padding(.horizontal, 20)
-                    .frame(height: hasNotch ? NotchLayout.hudRow : notch.height)
-                    .offset(y: hasNotch ? -3 : 0)
+                    Color.clear.frame(height: notchHeight)
+                    row.frame(height: NotchLayout.hudRow).offset(y: -3)
                 }
+            case let .plain(height):
+                row.frame(height: height)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: state.spokenDescription))
+    }
+
+    private var row: some View {
+        HStack(spacing: 12) {
+            icon
+            bar
+            if showPercent { percent }
+        }
+        .padding(.horizontal, 20)
     }
 
     private var icon: some View {
@@ -324,23 +397,26 @@ private struct HUDView: View {
 private struct ExpandedView: View {
     @ObservedObject var model: NotchModel
     @ObservedObject var media: MediaService
+    @ObservedObject private var outputs = AudioOutputs.shared
+    let metrics: NotchLayout.PlayerMetrics
     let scale: CGFloat
     @AppStorage(Pref.artworkGlow) private var glow = true
     @AppStorage(Pref.showAlbum) private var showAlbum = false
+    @AppStorage(Pref.visualizer) private var visualizer = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let s = scale
-        let top = NotchLayout.topInset(hasNotch: model.hasNotch, notch: model.notchSize)
+        let m = metrics, s = scale
+        let band = model.hasNotch ? model.notchSize.height : 0
 
         ZStack(alignment: .topLeading) {
             if glow, media.track != nil {
                 RadialGradient(colors: [media.tint.opacity(0.2), media.tint.opacity(0.07), .clear],
-                               center: .init(x: 0.14, y: 0.3), startRadius: 0, endRadius: 300 * s)
-                    .padding(.top, top)
+                               center: .init(x: 0.14, y: 0.35), startRadius: 0, endRadius: 300 * s)
                     .mask(alignment: .top) {
                         // Fade in below the notch so the strip beside the camera stays pure black.
                         VStack(spacing: 0) {
-                            Color.clear.frame(height: top)
+                            Color.clear.frame(height: band)
                             LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
                                 .frame(height: 46 * s)
                             Color.black
@@ -349,80 +425,141 @@ private struct ExpandedView: View {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
-            Group {
-                if let track = media.track {
-                    player(track, s: s)
-                } else {
-                    VStack(spacing: 8 * s) {
-                        Image(systemName: "music.note")
-                            .font(.system(size: 22 * s, weight: .medium))
-                            .accessibilityHidden(true)
-                        Text("Nothing is playing")
-                            .font(.system(size: 13 * s, weight: .medium))
-                    }
-                    .foregroundStyle(.white.opacity(0.45))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if let track = media.track {
+                // The artwork itself is drawn by IslandView so it can travel from the collapsed island.
+                ZStack(alignment: .topLeading) {
+                    titleBlock(track, s: s)
+                        .id(track.id)
+                        .transition(textTransition)
                 }
+                .frame(width: m.width - m.textLeading - m.inset - (visualizer ? 34 * s : 0), alignment: .leading)
+                .animation(Motion.textIn, value: track.id)
+                .offset(x: m.textLeading, y: m.textTop)
+
+                ScrubberView(track: track, tint: media.tint, scale: s) { media.seek(to: $0) }
+                    .frame(width: m.width - 2 * (m.inset + 2 * s), height: 16 * s)
+                    .offset(x: m.inset + 2 * s, y: m.scrubberCenter - 8 * s)
+
+                controls(track, m: m, s: s)
+                    .frame(width: m.width, height: 40 * s)
+                    .offset(y: m.controlsCenter - 20 * s)
+            } else {
+                VStack(spacing: 8 * s) {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 22 * s, weight: .medium))
+                        .accessibilityHidden(true)
+                    Text("Nothing is playing")
+                        .font(.system(size: 13 * s, weight: .medium))
+                }
+                .foregroundStyle(.white.opacity(0.45))
+                .frame(width: m.width, height: m.height)
+                .padding(.top, band / 2)
             }
-            .padding(.horizontal, NotchLayout.inset * s)
-            .padding(.top, top + NotchLayout.insetTop * s)
-            .padding(.bottom, 16 * s)
         }
+        .frame(width: m.width, height: m.height, alignment: .topLeading)
     }
 
-    private func player(_ track: Track, s: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 13 * s) {
-                // The artwork itself is drawn by IslandView so it can travel from the collapsed island.
-                Color.clear.frame(width: NotchLayout.artwork * s, height: NotchLayout.artwork * s)
+    private func titleBlock(_ track: Track, s: CGFloat) -> some View {
+        let subtitle = [track.artist, showAlbum ? track.album : ""].filter { !$0.isEmpty }.joined(separator: " — ")
+        return VStack(alignment: .leading, spacing: 1 * s) {
+            Text(verbatim: track.title)
+                .font(.system(size: 14 * s, weight: .semibold))
+                .foregroundStyle(.white)
+            if !subtitle.isEmpty {
+                Text(verbatim: subtitle)
+                    .font(.system(size: 13 * s))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
+    }
 
-                VStack(alignment: .leading, spacing: 2 * s) {
-                    Text(verbatim: track.title)
-                        .font(.system(size: 14 * s, weight: .semibold))
-                        .foregroundStyle(.white)
-                    if !track.artist.isEmpty {
-                        Text(verbatim: track.artist)
-                            .font(.system(size: 12.5 * s))
-                            .foregroundStyle(.white.opacity(0.62))
+    /// The old title blurs away, then the new one comes into focus.
+    private var textTransition: AnyTransition {
+        let swap = AnyTransition.modifier(active: BlurFade(active: true, scale: 1), identity: BlurFade(active: false, scale: 1))
+        let fade = reduceMotion ? AnyTransition.opacity : swap
+        return .asymmetric(insertion: fade.animation(Motion.textIn), removal: fade.animation(Motion.textOut))
+    }
+
+    /// Five evenly spaced slots: the music app, previous, play / pause, next, sound output.
+    private func controls(_ track: Track, m: NotchLayout.PlayerMetrics, s: CGFloat) -> some View {
+        let buttonWidth = 46 * s, buttonHeight = 36 * s
+        return HStack(spacing: 0) {
+            Group {
+                if let icon = media.sourceIcon, let name = media.sourceName {
+                    ControlButton(width: buttonWidth, height: buttonHeight, label: "Open \(name)",
+                                  action: { media.openSourceApp() }) {
+                        Image(nsImage: icon).resizable().frame(width: 19 * s, height: 19 * s).opacity(0.9)
                     }
-                    if showAlbum, !track.album.isEmpty {
-                        Text(verbatim: track.album)
-                            .font(.system(size: 11 * s))
-                            .foregroundStyle(.white.opacity(0.38))
-                    }
+                } else {
+                    Color.clear
                 }
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .combine)
+            }
+            .frame(width: m.controlSpacing)
 
-                Color.clear.frame(width: 34 * s, height: 1)
+            ControlButton(width: buttonWidth, height: buttonHeight, label: "Previous track",
+                          action: { media.previous() }) {
+                Image(systemName: "backward.fill")
+                    .font(.system(size: 19 * s, weight: .semibold))
+                    .foregroundStyle(.white)
             }
-            Spacer(minLength: 0)
-            ScrubberView(track: track, tint: media.tint, scale: s) { media.seek(to: $0) }
-                .frame(height: 16 * s)
-            Spacer(minLength: 0)
-            HStack(spacing: 30 * s) {
-                ControlButton(symbol: "backward.fill", size: 17 * s, label: "Previous track") { media.previous() }
-                ControlButton(symbol: track.isPlaying ? "pause.fill" : "play.fill", size: 25 * s,
-                              label: track.isPlaying ? "Pause" : "Play") { media.togglePlayPause() }
-                ControlButton(symbol: "forward.fill", size: 17 * s, label: "Next track") { media.next() }
+            .frame(width: m.controlSpacing)
+
+            ControlButton(width: buttonWidth, height: buttonHeight, label: track.isPlaying ? "Pause" : "Play",
+                          action: { media.togglePlayPause() }) {
+                Image(systemName: track.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 24 * s, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.symbolEffect(.replace))
             }
+            .frame(width: m.controlSpacing)
+
+            ControlButton(width: buttonWidth, height: buttonHeight, label: "Next track",
+                          action: { media.next() }) {
+                Image(systemName: "forward.fill")
+                    .font(.system(size: 19 * s, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: m.controlSpacing)
+
+            ControlButton(width: buttonWidth, height: buttonHeight, label: "Audio output",
+                          action: { NotchController.shared.holdOpen { outputs.showMenu() } }) {
+                Image(systemName: outputs.symbol)
+                    .font(.system(size: 15 * s, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .frame(width: m.controlSpacing)
         }
     }
 }
 
 // MARK: - Pieces
 
+/// Artwork with a card flip when the image changes.
 struct ArtworkView: View {
     let image: NSImage?
     let size: CGFloat
     let radius: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let key = image.map(ObjectIdentifier.init)
+        ZStack {
+            face
+                .id(key)
+                .transition(reduceMotion ? .opacity.animation(.easeInOut(duration: 0.25)) : .flip)
+        }
+        .frame(width: size, height: size)
+        .animation(.easeInOut(duration: 0.3), value: key)
+    }
+
+    private var face: some View {
         ZStack {
             if let image {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
-                    .transition(.opacity)
             } else {
                 Rectangle().fill(.white.opacity(0.12))
                 Image(systemName: "music.note")
@@ -432,7 +569,6 @@ struct ArtworkView: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-        .animation(.easeInOut(duration: 0.25), value: image)
     }
 }
 
@@ -587,15 +723,15 @@ final class ScrubberNSView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        rail.backgroundColor = NSColor.white.withAlphaComponent(0.18).cgColor
-        fill.backgroundColor = NSColor.white.withAlphaComponent(0.92).cgColor
+        rail.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        fill.backgroundColor = NSColor.white.withAlphaComponent(0.8).cgColor
         fill.anchorPoint = CGPoint(x: 0, y: 0.5)
         for label in [leftLabel, rightLabel] {
-            label.foregroundColor = NSColor.white.withAlphaComponent(0.5).cgColor
+            label.foregroundColor = NSColor.white.withAlphaComponent(0.45).cgColor
             label.actions = ["contents": NSNull()]
         }
-        leftLabel.alignmentMode = .right
-        rightLabel.alignmentMode = .left
+        leftLabel.alignmentMode = .left
+        rightLabel.alignmentMode = .right
         [rail, fill, leftLabel, rightLabel].forEach { layer?.addSublayer($0) }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                        owner: self))
@@ -632,9 +768,9 @@ final class ScrubberNSView: NSView {
         }
     }
 
-    private var labelWidth: CGFloat { 40 * scale }
+    private var labelWidth: CGFloat { 30 * scale }
     private var barRect: CGRect {
-        let inset = labelWidth + 8 * scale
+        let inset = labelWidth + 6 * scale
         return CGRect(x: inset, y: 0, width: max(10, bounds.width - inset * 2), height: bounds.height)
     }
 
@@ -642,11 +778,11 @@ final class ScrubberNSView: NSView {
         super.layout()
         guard let track else { return }
         let bar = barRect
-        let thick = (hovering || dragFraction != nil ? 7 : 4.5) * scale
+        let thick = (hovering || dragFraction != nil ? 7 : 5) * scale
         let known = track.duration > 0
         let position = track.position()
         let fraction = dragFraction ?? (known ? CGFloat(position / track.duration) : 0)
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 10.5 * scale, weight: .medium)
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 11 * scale, weight: .medium)
         let lineHeight = ceil(font.ascender - font.descender) + 1
 
         CATransaction.begin()
@@ -661,8 +797,10 @@ final class ScrubberNSView: NSView {
             label.fontSize = font.pointSize
             label.contentsScale = window?.backingScaleFactor ?? 2
         }
-        leftLabel.frame = CGRect(x: 0, y: (bar.height - lineHeight) / 2, width: labelWidth, height: lineHeight)
-        rightLabel.frame = CGRect(x: bounds.width - labelWidth, y: (bar.height - lineHeight) / 2, width: labelWidth, height: lineHeight)
+        let labelY = (bar.height - lineHeight) / 2
+        leftLabel.frame = CGRect(x: 0, y: labelY, width: labelWidth + 4 * scale, height: lineHeight)
+        rightLabel.frame = CGRect(x: bounds.width - labelWidth - 4 * scale, y: labelY,
+                                  width: labelWidth + 4 * scale, height: lineHeight)
         CATransaction.commit()
 
         // Bar: set the current width, then let the compositor run it to the end.
@@ -748,21 +886,23 @@ final class ScrubberNSView: NSView {
     }
 }
 
-private struct ControlButton: View {
-    let symbol: String
-    let size: CGFloat
+/// A control-row button with a soft rounded highlight on hover.
+private struct ControlButton<Icon: View>: View {
+    let width: CGFloat
+    let height: CGFloat
     let label: LocalizedStringKey
     let action: () -> Void
+    @ViewBuilder let icon: () -> Icon
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(.white)
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: size * 2, height: size * 1.7)
-                .background(Circle().fill(.white.opacity(hovering ? 0.14 : 0)).scaleEffect(1.15))
+            icon()
+                .frame(width: width, height: height)
+                .background(
+                    RoundedRectangle(cornerRadius: height * 0.3, style: .continuous)
+                        .fill(.white.opacity(hovering ? 0.12 : 0))
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
@@ -774,7 +914,7 @@ private struct ControlButton: View {
     private struct PressStyle: ButtonStyle {
         func makeBody(configuration: Configuration) -> some View {
             configuration.label
-                .scaleEffect(configuration.isPressed ? 0.86 : 1)
+                .scaleEffect(configuration.isPressed ? 0.88 : 1)
                 .animation(.spring(response: 0.22, dampingFraction: 0.6), value: configuration.isPressed)
         }
     }

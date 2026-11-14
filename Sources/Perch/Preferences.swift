@@ -146,19 +146,21 @@ enum AnimationStyle: String, CaseIterable, Identifiable {
         case .relaxed: "Relaxed"
         }
     }
-    /// Opening overshoots a little; closing settles without a bounce.
+    /// Opening overshoots a touch; closing is critically damped, so it settles
+    /// against the notch without a bounce. "Smooth" matches the timing measured
+    /// frame by frame from a screen recording of a well-regarded notch app.
     var open: Animation {
         switch self {
-        case .snappy: .spring(response: 0.36, dampingFraction: 0.82)
-        case .smooth: .spring(response: 0.55, dampingFraction: 0.8)
-        case .relaxed: .spring(response: 0.8, dampingFraction: 0.82)
+        case .snappy: .spring(response: 0.3, dampingFraction: 0.8)
+        case .smooth: .spring(response: 0.38, dampingFraction: 0.78)
+        case .relaxed: .spring(response: 0.52, dampingFraction: 0.8)
         }
     }
     var close: Animation {
         switch self {
-        case .snappy: .spring(response: 0.32, dampingFraction: 0.92)
-        case .smooth: .spring(response: 0.5, dampingFraction: 0.9)
-        case .relaxed: .spring(response: 0.7, dampingFraction: 0.92)
+        case .snappy: .spring(response: 0.32, dampingFraction: 1)
+        case .smooth: .spring(response: 0.41, dampingFraction: 1)
+        case .relaxed: .spring(response: 0.56, dampingFraction: 1)
         }
     }
     /// Content appears a beat after the island starts to grow, so the shape leads.

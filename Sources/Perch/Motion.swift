@@ -20,8 +20,12 @@ enum Motion {
     /// Content leaving: quick, so it is gone before the shape closes over it.
     static var contentOut: Animation { .easeIn(duration: 0.11) }
 
-    /// The slight swell while the pointer rests on the island.
-    static var swell: Animation { .spring(response: 0.34, dampingFraction: 0.74) }
+    /// The island growing a little while the pointer rests on it.
+    static var swell: Animation { reduced ? .easeInOut(duration: 0.15) : .spring(response: 0.26, dampingFraction: 0.95) }
+
+    /// Song title and artist trading places when the track changes.
+    static var textIn: Animation { reduced ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.22).delay(0.1) }
+    static var textOut: Animation { .easeIn(duration: 0.12) }
 
     /// A value changing inside an open indicator.
     static var update: Animation { reduced ? .linear(duration: 0.08) : .spring(response: 0.26, dampingFraction: 0.86) }

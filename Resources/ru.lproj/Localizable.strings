@@ -188,3 +188,7 @@
 "Copied" = "Скопировано";
 "A report about Perch and this Mac for bug reports. It goes only to the clipboard and contains no track names." = "Отчёт о Perch и этом Mac для сообщений об ошибках. Он попадает только в буфер обмена и не содержит названий треков.";
 "Show the welcome screen" = "Показать знакомство";
+
+/* Audio output */
+"Audio output" = "Вывод звука";
+"No output devices" = "Нет устройств вывода";

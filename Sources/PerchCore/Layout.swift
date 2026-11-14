@@ -20,10 +20,8 @@ public enum NotchLayout {
     public static let peekArtwork: CGFloat = 52
     public static let peekSide: CGFloat = 70
 
-    // Expanded player, multiplied by the size setting.
-    public static let artwork: CGFloat = 58
-    public static let inset: CGFloat = 22
-    public static let insetTop: CGFloat = 8
+    /// How much the collapsed island grows while the pointer rests on it.
+    public static let hoverGrowth = CGSize(width: 26, height: 7)
 
     // Volume and brightness indicator.
     public static let hudWing: CGFloat = 96
@@ -52,8 +50,37 @@ public enum NotchLayout {
     /// Width added on each side of the notch for the artwork and the visualizer.
     public static func wing(_ notch: CGSize) -> CGFloat { notch.height + 4 }
 
-    /// Space above the expanded content: the notch itself, or a small margin without one.
-    public static func topInset(hasNotch: Bool, notch: CGSize) -> CGFloat { hasNotch ? notch.height : 10 }
+    /// Positions inside the expanded player, in points from its top-left corner.
+    /// The artwork sits beside the notch and the text below it, so no band of
+    /// empty black is left under the camera.
+    public struct PlayerMetrics: Equatable {
+        public var width: CGFloat
+        public var height: CGFloat
+        public var inset: CGFloat
+        public var artTop: CGFloat
+        public var art: CGFloat
+        public var textLeading: CGFloat
+        public var textTop: CGFloat
+        public var scrubberCenter: CGFloat
+        public var controlsCenter: CGFloat
+        /// Extra row for the volume or brightness indicator while the player is open.
+        public var hudRow: CGFloat
+        /// Distance between the centres of the buttons in the control row.
+        public var controlSpacing: CGFloat
+    }
+
+    public static func player(notch: CGSize, hasNotch: Bool, scale s: CGFloat) -> PlayerMetrics {
+        let inset = 18 * s, art = 56 * s, artTop = 18 * s
+        // Wide enough for the artwork to fit beside the notch.
+        let width = max(368 * s, notch.width + 2 * (inset + art + 4 * s))
+        // Text starts under the notch, which it would otherwise disappear behind.
+        let textTop = hasNotch ? max(notch.height + 6, 28 * s) : 28 * s
+        let scrubber = max(artTop + art + 20 * s, textTop + 50 * s)
+        let controls = scrubber + 40 * s
+        return PlayerMetrics(width: width, height: controls + 44 * s, inset: inset, artTop: artTop, art: art,
+                             textLeading: inset + art + 16 * s, textTop: textTop, scrubberCenter: scrubber,
+                             controlsCenter: controls, hudRow: 34 * s, controlSpacing: 72 * s)
+    }
 
     public static func hudSize(style: HUDStyle, notch: CGSize, hasNotch: Bool) -> CGSize {
         if !hasNotch { return CGSize(width: 290, height: notch.height) }
@@ -64,17 +91,24 @@ public enum NotchLayout {
     }
 
     /// The island's size, without the ears.
+    /// - Parameters:
+    ///   - hud: style of the volume or brightness indicator on screen, if any.
+    ///   - swell: the pointer rests on the collapsed island.
     public static func size(phase: IslandPhase, notch: CGSize, hasNotch: Bool, active: Bool, scale: CGFloat,
-                            hud: HUDStyle? = nil) -> CGSize {
-        if let hud, phase != .expanded { return hudSize(style: hud, notch: notch, hasNotch: hasNotch) }
-        switch phase {
-        case .expanded:
-            return CGSize(width: max(388 * scale, notch.width + 60),
-                          height: topInset(hasNotch: hasNotch, notch: notch) + 168 * scale)
-        case .peek where active:
-            return CGSize(width: max(notch.width + 2 * peekSide, 330), height: notch.height + peekRow)
-        default:
-            return active ? CGSize(width: notch.width + 2 * wing(notch), height: notch.height) : notch
+                            hud: HUDStyle? = nil, swell: Bool = false) -> CGSize {
+        if phase == .expanded {
+            let player = player(notch: notch, hasNotch: hasNotch, scale: scale)
+            return CGSize(width: player.width, height: player.height + (hud == nil ? 0 : player.hudRow))
         }
+        if let hud { return hudSize(style: hud, notch: notch, hasNotch: hasNotch) }
+        if phase == .peek, active {
+            return CGSize(width: max(notch.width + 2 * peekSide, 330), height: notch.height + peekRow)
+        }
+        var size = active ? CGSize(width: notch.width + 2 * wing(notch), height: notch.height) : notch
+        if swell, phase == .collapsed {
+            size.width += hoverGrowth.width
+            size.height += hoverGrowth.height
+        }
+        return size
     }
 }

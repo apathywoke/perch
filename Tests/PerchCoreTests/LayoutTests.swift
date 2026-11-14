@@ -35,20 +35,53 @@ struct LayoutTests {
 
     @Test func expandedFollowsTheSizeSetting() {
         let normal = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: true, active: true, scale: 1)
-        #expect(normal == CGSize(width: 388, height: 38 + 168))
+        #expect(normal == CGSize(width: 368, height: 178))
         let large = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: true, active: true, scale: 1.25)
-        #expect(large == CGSize(width: 485, height: 38 + 210))
+        #expect(large == CGSize(width: 460, height: 222.5))
+    }
+
+    @Test func artworkFitsBesideTheNotch() {
+        for scale in [0.85, 1, 1.35] as [CGFloat] {
+            let player = NotchLayout.player(notch: notch, hasNotch: true, scale: scale)
+            let notchLeftEdge = (player.width - notch.width) / 2
+            #expect(player.inset + player.art <= notchLeftEdge)
+            #expect(player.textTop >= notch.height) // text never hides behind the camera
+        }
+    }
+
+    @Test func playerRowsAreEvenlySpaced() {
+        let player = NotchLayout.player(notch: notch, hasNotch: true, scale: 1)
+        #expect(player.artTop == 18)
+        #expect(player.textTop == 44)
+        #expect(player.scrubberCenter == 94)
+        #expect(player.controlsCenter == 134)
     }
 
     @Test func expandedIsNeverNarrowerThanTheNotch() {
         let wide = CGSize(width: 400, height: 38)
         let size = NotchLayout.size(phase: .expanded, notch: wide, hasNotch: true, active: true, scale: 0.85)
-        #expect(size.width == 460)
+        #expect(abs(size.width - 532.6) < 0.01)
     }
 
-    @Test func expandedWithoutANotchUsesASmallTopMargin() {
-        let size = NotchLayout.size(phase: .expanded, notch: NotchLayout.virtualNotch, hasNotch: false, active: true, scale: 1)
-        #expect(size.height == CGFloat(178)) // 10 pt margin + content
+    @Test func expandedWithoutANotchStartsAtTheTop() {
+        let player = NotchLayout.player(notch: NotchLayout.virtualNotch, hasNotch: false, scale: 1)
+        #expect(player.textTop == 28)
+        #expect(player.height == 178)
+    }
+
+    @Test func pointerOnTheIslandMakesItSwell() {
+        let idle = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: true, active: false, scale: 1, swell: true)
+        #expect(idle == CGSize(width: 209 + 26, height: 38 + 7))
+        let playing = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: true, active: true, scale: 1, swell: true)
+        #expect(playing == CGSize(width: 293 + 26, height: 38 + 7))
+    }
+
+    @Test func onlyTheCollapsedIslandSwells() {
+        let card = NotchLayout.size(phase: .peek, notch: notch, hasNotch: true, active: true, scale: 1, swell: true)
+        #expect(card == CGSize(width: 349, height: 82))
+        let indicator = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: true, active: true, scale: 1,
+                                         hud: .beside, swell: true)
+        #expect(indicator == CGSize(width: 401, height: 38))
     }
 
     @Test func trackCardNeedsMusic() {
@@ -73,9 +106,9 @@ struct LayoutTests {
         #expect(size == CGSize(width: 290, height: 32))
     }
 
-    @Test func expandedPlayerKeepsItsSizeWhileAnIndicatorShows() {
+    @Test func expandedPlayerAddsARowForAnIndicator() {
         let size = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: true, active: true, scale: 1, hud: .below)
-        #expect(size == CGSize(width: 388, height: 206))
+        #expect(size == CGSize(width: 368, height: 178 + 34))
     }
 }
 
