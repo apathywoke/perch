@@ -1,3 +1,4 @@
+import PerchCore
 import ServiceManagement
 import SwiftUI
 
@@ -209,7 +210,7 @@ private struct AppearancePane: View {
                 Picker("Right-hand time label", selection: $timeStyle) {
                     ForEach(TimeStyle.allCases) { Text($0.title).tag($0) }
                 }
-                Button("Preview the expanded island") { NotchController.shared.expand() }
+                Button("Preview the expanded island") { NotchController.shared.preview() }
             }
             Section("Collapsed island") {
                 Toggle("Swap the artwork and the visualizer", isOn: $swapSides)
@@ -290,6 +291,7 @@ private struct IndicatorsPane: View {
 
 private struct SourcesPane: View {
     @ObservedObject private var media = MediaService.shared
+    @AppStorage(Pref.fallbackSources) private var fallback = true
 
     var body: some View {
         Form {
@@ -324,12 +326,28 @@ private struct SourcesPane: View {
                     Button("Clear the list") { media.clearSources() }
                 }
             }
-            if media.helperFailed {
-                Section {
-                    Label("Perch cannot read “Now Playing” on this system. The media helper failed to start.",
-                          systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+            Section {
+                LabeledContent("System “Now Playing”") {
+                    if media.helperFailed {
+                        HStack(spacing: 8) {
+                            Label("Unavailable", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Button("Try again") { media.retryHelper() }
+                        }
+                    } else {
+                        Label("Working", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
                 }
+                Toggle("Follow Spotify and Music directly when needed", isOn: $fallback)
+                if case .fallback(let player) = media.source {
+                    Text("Backup source in use for \(MediaService.name(for: player.rawValue))")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Backup source")
+            } footer: {
+                Text("Spotify and Music announce what they play to any app. Perch uses this only when the system “Now Playing” service misses the music. To control them from the island in that case, macOS asks for permission once per app.")
             }
         }
     }
@@ -357,6 +375,7 @@ private struct ShortcutsPane: View {
 
 private struct AboutPane: View {
     @State private var confirmReset = false
+    @State private var copied = false
 
     var body: some View {
         Form {
@@ -378,9 +397,28 @@ private struct AboutPane: View {
                 Label("No network connections of any kind.", systemImage: "wifi.slash")
                 Label("No Screen Recording or microphone access.", systemImage: "lock.shield")
                 Label("Accessibility is requested only for the optional volume and brightness indicators.", systemImage: "hand.raised")
+                Label("Control of Spotify or Music is requested only when the backup source is in use.", systemImage: "music.note")
                 Label("Open source under the GNU GPL v3 licence.", systemImage: "chevron.left.forwardslash.chevron.right")
             }
             Section {
+                HStack {
+                    Button("Copy diagnostics") {
+                        Diagnostics.copyToClipboard()
+                        copied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+                    }
+                    if copied {
+                        Label("Copied", systemImage: "checkmark")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Diagnostics")
+            } footer: {
+                Text("A report about Perch and this Mac for bug reports. It goes only to the clipboard and contains no track names.")
+            }
+            Section {
+                Button("Show the welcome screen") { AppDelegate.shared?.showOnboarding() }
                 Button("Reset all settings…") { confirmReset = true }
                 Button("Quit Perch") { NSApp.terminate(nil) }
             }
@@ -411,7 +449,9 @@ private struct SliderRow: View {
     var body: some View {
         LabeledContent {
             HStack(spacing: 10) {
-                Slider(value: $value, in: range, step: step).frame(width: 190)
+                Slider(value: $value, in: range, step: step)
+                    .frame(width: 190)
+                    .accessibilityLabel(Text(title))
                 Text(verbatim: text(value))
                     .monospacedDigit().foregroundStyle(.secondary)
                     .frame(width: 54, alignment: .trailing)

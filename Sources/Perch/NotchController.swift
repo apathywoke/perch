@@ -1,9 +1,11 @@
 import AppKit
 import Combine
+import os
+import PerchCore
 import SwiftUI
 
 final class NotchModel: ObservableObject {
-    enum Phase { case collapsed, peek, expanded }
+    typealias Phase = IslandPhase
 
     @Published var phase: Phase = .collapsed
     @Published var notchSize = CGSize(width: 200, height: 32)
@@ -15,47 +17,6 @@ final class NotchModel: ObservableObject {
     @Published var hovering = false
     /// Volume / brightness indicator currently shown, if any.
     @Published var hud: HUDState?
-}
-
-enum NotchLayout {
-    /// Radius of the concave corners that blend the island into the screen edge.
-    static let earRadius: CGFloat = 6
-
-    static let peekRow: CGFloat = 44
-    static let peekArtwork: CGFloat = 52
-    static let peekSide: CGFloat = 70
-    // Expanded player metrics, multiplied by the size setting.
-    static let artwork: CGFloat = 58
-    static let inset: CGFloat = 22
-    static let insetTop: CGFloat = 8
-
-    static func wing(_ notch: CGSize) -> CGFloat { notch.height + 4 }
-    static func topInset(hasNotch: Bool, notch: CGSize) -> CGFloat { hasNotch ? notch.height : 10 }
-
-    static let hudWing: CGFloat = 96
-    static let hudRow: CGFloat = 36
-
-    static func hudSize(style: HUDStyle, notch: CGSize, hasNotch: Bool) -> CGSize {
-        if !hasNotch { return CGSize(width: 290, height: notch.height) }
-        switch style {
-        case .beside: return CGSize(width: notch.width + 2 * hudWing, height: notch.height)
-        case .below: return CGSize(width: max(notch.width + 2 * wing(notch), 330), height: notch.height + hudRow)
-        }
-    }
-
-    static func size(phase: NotchModel.Phase, notch: CGSize, hasNotch: Bool, active: Bool, scale: CGFloat,
-                     hud: HUDStyle? = nil) -> CGSize {
-        if let hud, phase != .expanded { return hudSize(style: hud, notch: notch, hasNotch: hasNotch) }
-        switch phase {
-        case .expanded:
-            return CGSize(width: max(388 * scale, notch.width + 60),
-                          height: topInset(hasNotch: hasNotch, notch: notch) + 168 * scale)
-        case .peek where active:
-            return CGSize(width: max(notch.width + 2 * peekSide, 330), height: notch.height + peekRow)
-        default:
-            return active ? CGSize(width: notch.width + 2 * wing(notch), height: notch.height) : notch
-        }
-    }
 }
 
 private final class NotchPanel: NSPanel {
@@ -74,6 +35,7 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
 /// mouse / gesture handling. The SwiftUI views only draw `NotchModel`.
 final class NotchController {
     static let shared = NotchController()
+    static let log = Logger(subsystem: "dev.perch.Perch", category: "island")
 
     let model = NotchModel()
     private let media = MediaService.shared
@@ -82,6 +44,7 @@ final class NotchController {
     private var track: Track?
     private var pausedTooLong = false
     private var fullscreen = false
+    private var seenFirstTrack = false
 
     private var cancellables = Set<AnyCancellable>()
     private var monitors: [Any] = []
@@ -94,7 +57,6 @@ final class NotchController {
     private var pauseWork: DispatchWorkItem?
     private var swipeAccumulated: CGFloat = 0
     private var swipeFired = false
-    private var seenFirstTrack = false
 
     private static let panelSize = CGSize(width: 760, height: 380)
 
@@ -173,28 +135,31 @@ final class NotchController {
         guard let panel, let screen = pickScreen() else { return }
         self.screen = screen
 
-        let hasNotch = screen.safeAreaInsets.top > 0
-        var notch = CGSize(width: 184, height: 32)
-        if hasNotch {
-            let left = screen.auxiliaryTopLeftArea?.width ?? 0
-            let right = screen.auxiliaryTopRightArea?.width ?? 0
-            let width = screen.frame.width - left - right
-            notch = CGSize(width: width > 60 ? width : 200, height: screen.safeAreaInsets.top)
+        let geometry = NotchLayout.geometry(screenWidth: screen.frame.width, safeAreaTop: screen.safeAreaInsets.top,
+                                            leftAuxWidth: screen.auxiliaryTopLeftArea?.width,
+                                            rightAuxWidth: screen.auxiliaryTopRightArea?.width)
+        if geometry.notch != model.notchSize || geometry.hasNotch != model.hasNotch {
+            Self.log.notice("Display: notch \(geometry.hasNotch), \(Int(geometry.notch.width))×\(Int(geometry.notch.height))")
         }
-        fullscreen = Pref.bool(Pref.hideInFullscreen) && Self.isFullscreen(screen)
+        let nowFullscreen = Pref.bool(Pref.hideInFullscreen) && Self.isFullscreen(screen)
+        if nowFullscreen != fullscreen {
+            fullscreen = nowFullscreen
+            Self.log.notice("Full-screen space: \(nowFullscreen)")
+        }
         let active = track != nil && !pausedTooLong
         let visible = model.hud != nil || !fullscreen
-            && (hasNotch || (Pref.bool(Pref.showOnNonNotch) && (active || model.phase == .expanded)))
+            && (geometry.hasNotch || (Pref.bool(Pref.showOnNonNotch) && (active || model.phase == .expanded)))
 
         let frame = CGRect(x: screen.frame.midX - Self.panelSize.width / 2,
                            y: screen.frame.maxY - Self.panelSize.height,
                            width: Self.panelSize.width, height: Self.panelSize.height)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
 
-        if model.notchSize != notch { model.notchSize = notch }
-        if model.hasNotch != hasNotch { model.hasNotch = hasNotch }
+        if model.notchSize != geometry.notch { model.notchSize = geometry.notch }
+        if model.hasNotch != geometry.hasNotch { model.hasNotch = geometry.hasNotch }
         if model.active != active || model.visible != visible {
-            withAnimation(AnimationStyle.current) {
+            let growing = (active && !model.active) || (visible && !model.visible)
+            withAnimation(growing ? Motion.grow : Motion.shrink) {
                 model.active = active
                 model.visible = visible
                 if !visible, model.phase != .collapsed { model.phase = .collapsed }
@@ -249,6 +214,7 @@ final class NotchController {
         }
         refresh()
 
+        // No card for the song that was already playing when Perch started.
         let launchTrack = !seenFirstTrack && new != nil
         if new != nil { seenFirstTrack = true }
         if let new, !launchTrack, new.isPlaying, new.id != old?.id, model.phase == .collapsed, model.visible,
@@ -267,8 +233,7 @@ final class NotchController {
 
     private func setPhase(_ phase: NotchModel.Phase) {
         guard model.phase != phase else { return }
-        let style = Pref.value(Pref.animation, AnimationStyle.smooth)
-        withAnimation(phase == .expanded ? style.open : style.close) {
+        withAnimation(phase == .collapsed ? Motion.shrink : Motion.grow) {
             model.phase = phase
             if phase == .expanded { model.hovering = false }
         }
@@ -283,17 +248,17 @@ final class NotchController {
     // MARK: Volume / brightness indicator
 
     func showHUD(_ state: HUDState) {
-        let style = Pref.value(Pref.animation, AnimationStyle.smooth)
         let fresh = model.hud == nil
-        withAnimation(fresh ? style.open : .spring(response: 0.3, dampingFraction: 0.82)) {
+        withAnimation(fresh ? Motion.grow : Motion.update) {
             model.hud = state
             model.visible = true
             if model.phase == .peek { model.phase = .collapsed }
         }
         cachedHitRect = nil
+        announce(state)
         hudWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            withAnimation(style.close) { self?.model.hud = nil }
+            withAnimation(Motion.shrink) { self?.model.hud = nil }
             self?.refresh()
         }
         hudWork = work
@@ -301,11 +266,35 @@ final class NotchController {
         evaluateMouse()
     }
 
+    /// The system indicator is announced by VoiceOver; ours has to be too.
+    private func announce(_ state: HUDState) {
+        guard NSWorkspace.shared.isVoiceOverEnabled else { return }
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested, userInfo: [
+            .announcement: state.spokenDescription,
+            .priority: NSAccessibilityPriorityLevel.high.rawValue,
+        ])
+    }
+
+    // MARK: Open / close
+
     func expand() {
         guard !fullscreen else { return }
         openWork?.cancel(); closeWork?.cancel(); peekWork?.cancel()
-        if !model.visible { withAnimation(AnimationStyle.current) { model.visible = true } }
+        if !model.visible { withAnimation(Motion.grow) { model.visible = true } }
         setPhase(.expanded)
+    }
+
+    /// Opens the island for a look from Settings or the welcome window and closes
+    /// it again after a few seconds unless the pointer moves onto it.
+    func preview() {
+        expand()
+        closeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.isInside, self.model.phase == .expanded else { return }
+            self.collapse()
+        }
+        closeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
     }
 
     func collapse() {
@@ -370,7 +359,7 @@ final class NotchController {
 
         let swell = inside && model.phase != .expanded
         if model.hovering != swell {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.62)) { model.hovering = swell }
+            withAnimation(Motion.swell) { model.hovering = swell }
         }
 
         if inside {
@@ -415,5 +404,18 @@ final class NotchController {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             }
         }
+    }
+
+    // MARK: Diagnostics
+
+    func diagnosticRows() -> [(String, String)] {
+        [
+            ("State", model.phase.rawValue),
+            ("Visible", model.visible ? "yes" : "no"),
+            ("Music shown", model.active ? "yes" : "no"),
+            ("Notch", model.hasNotch ? "\(Int(model.notchSize.width))×\(Int(model.notchSize.height))" : "none"),
+            ("Full-screen space", fullscreen ? "yes" : "no"),
+            ("Indicator on screen", model.hud == nil ? "no" : "yes"),
+        ]
     }
 }

@@ -18,6 +18,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN" "$APP/Contents/MacOS/Perch"
 sed "s/__VERSION__/$VERSION/g" Resources/Info.plist > "$APP/Contents/Info.plist"
+# The commit goes into the diagnostics report, so a bug report says which code it is about.
+COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+git diff --quiet HEAD 2>/dev/null || COMMIT="$COMMIT+local-changes"
+/usr/libexec/PlistBuddy -c "Add :PerchCommit string $COMMIT" "$APP/Contents/Info.plist"
 cp -R Resources/en.lproj Resources/ru.lproj "$APP/Contents/Resources/"
 cp Helper/perch-media-helper.pl "$APP/Contents/Resources/"
 
@@ -48,6 +52,7 @@ if [ -n "$IDENTITY" ]; then
 else
     IDENTITY="-"
     echo "▸ Signing (ad hoc: macOS forgets permissions after each build)"
+    echo "  Run Scripts/make-signing-cert.sh once to keep them between builds."
 fi
 codesign --force --sign "$IDENTITY" "$APP/Contents/Frameworks/PerchMediaHelper.dylib"
 codesign --force --sign "$IDENTITY" "$APP"

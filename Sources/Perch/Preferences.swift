@@ -1,3 +1,4 @@
+import PerchCore
 import SwiftUI
 
 /// All user settings live in UserDefaults. Views bind with @AppStorage,
@@ -41,6 +42,9 @@ enum Pref {
     // Sources
     static let ignoredSources = "ignoredSources"
     static let knownSources = "knownSources"
+    static let fallbackSources = "fallbackSources"
+    // First launch
+    static let onboardingDone = "onboardingDone"
     // Shortcuts
     static let hotkeys = "hotkeys"
 
@@ -75,6 +79,7 @@ enum Pref {
         hudPercent: true,
         hudColor: VisualizerColor.white.rawValue,
         hudDuration: 1.6,
+        fallbackSources: true,
     ]
 
     private static var store: UserDefaults { .standard }
@@ -156,7 +161,14 @@ enum AnimationStyle: String, CaseIterable, Identifiable {
         case .relaxed: .spring(response: 0.7, dampingFraction: 0.92)
         }
     }
-    static var current: Animation { Pref.value(Pref.animation, AnimationStyle.smooth).close }
+    /// Content appears a beat after the island starts to grow, so the shape leads.
+    var contentIn: Animation {
+        switch self {
+        case .snappy: .spring(response: 0.3, dampingFraction: 0.9).delay(0.03)
+        case .smooth: .spring(response: 0.42, dampingFraction: 0.9).delay(0.06)
+        case .relaxed: .spring(response: 0.6, dampingFraction: 0.9).delay(0.1)
+        }
+    }
 }
 
 enum VisualizerColor: String, CaseIterable, Identifiable {

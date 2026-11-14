@@ -1,12 +1,15 @@
 import AppKit
 import Combine
+import os
+import PerchCore
 import SwiftUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private(set) static weak var shared: AppDelegate?
 
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
+    private var onboardingWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -32,7 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         HotkeyCenter.shared.registerAll()
         updateStatusItem()
         SystemHUD.shared.sync()
-        SystemHUD.shared.askOnFirstLaunch()
+        if Pref.bool(Pref.onboardingDone) {
+            SystemHUD.shared.askOnFirstLaunch()
+        } else {
+            showOnboarding() // explains the Accessibility request before macOS shows it
+        }
 
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: RunLoop.main)
@@ -68,6 +75,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    // MARK: Welcome window
+
+    func showOnboarding() {
+        if onboardingWindow == nil {
+            let view = OnboardingView { [weak self] in self?.onboardingWindow?.close() }
+            let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+            window.styleMask = [.titled, .closable, .fullSizeContentView]
+            window.titlebarAppearsTransparent = true
+            window.title = NSLocalizedString("Welcome to Perch", comment: "")
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.center()
+            onboardingWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        onboardingWindow?.makeKeyAndOrderFront(nil)
+        Logger(subsystem: "dev.perch.Perch", category: "app").notice("Welcome window shown")
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === onboardingWindow else { return }
+        Pref.set(true, Pref.onboardingDone)
+        // The permission was explained there; no surprise prompt on a later launch.
+        Pref.set(true, Pref.hudAskedForAccess)
+        Logger(subsystem: "dev.perch.Perch", category: "app").notice("Welcome window closed")
+        DispatchQueue.main.async { [weak self] in self?.onboardingWindow = nil }
     }
 
     func relaunch() {

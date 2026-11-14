@@ -17,6 +17,7 @@
     <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSAppleEventsUsageDescription</key><string>Perch controls Spotify or Music from the island when the system “Now Playing” service misses them.</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 apathywoke. GNU GPL v3.</string>
 </dict>
 </plist>

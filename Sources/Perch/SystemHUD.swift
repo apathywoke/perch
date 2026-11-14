@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import CoreAudio
 import os
+import PerchCore
 import SwiftUI
 
 struct HUDState: Equatable {
@@ -11,9 +12,18 @@ struct HUDState: Equatable {
     var muted = false
 }
 
-enum HUDStyle: String, CaseIterable, Identifiable {
-    case beside, below
-    var id: String { rawValue }
+extension HUDState {
+    var level: Double { kind == .volume && muted ? 0 : value }
+
+    /// What VoiceOver says, e.g. "Volume 50%".
+    var spokenDescription: String {
+        let name = NSLocalizedString(kind == .volume ? "Volume" : "Brightness", comment: "")
+        if level <= 0.001, kind == .volume { return name + ", " + NSLocalizedString("Muted", comment: "") }
+        return "\(name) \(Int((level * 100).rounded()))%"
+    }
+}
+
+extension HUDStyle {
     var title: LocalizedStringKey {
         switch self {
         case .beside: "Beside the notch"
@@ -76,6 +86,15 @@ final class SystemHUD: ObservableObject {
             trustTimer?.invalidate()
             trustTimer = nil
         }
+    }
+
+    func diagnosticRows() -> [(String, String)] {
+        [
+            ("Enabled", Pref.bool(Pref.hudEnabled) ? "yes" : "no"),
+            ("Accessibility access", trusted ? "granted" : "not granted"),
+            ("Key interception", tap != nil ? "active" : "off"),
+            ("Volume / brightness", "\(Pref.bool(Pref.hudVolume) ? "on" : "off") / \(Pref.bool(Pref.hudBrightness) ? "on" : "off")"),
+        ]
     }
 
     /// Shows the system permission dialog once, on the first launch with the
@@ -173,9 +192,7 @@ final class SystemHUD: ObservableObject {
         if code == 7 {
             muted.toggle()
         } else {
-            // Snap to the step grid so repeated presses land on the same levels as the system's.
-            let steps = (volume / step).rounded()
-            volume = min(max((steps + (code == 0 ? 1 : -1)) * step, 0), 1)
+            volume = VolumeMath.stepped(volume, step: step, up: code == 0)
             Audio.setVolume(device, volume)
             muted = false
         }

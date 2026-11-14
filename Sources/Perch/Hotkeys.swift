@@ -41,6 +41,13 @@ final class HotkeyCenter: ObservableObject {
 
     func hotkey(for action: HotkeyAction) -> Hotkey? { bindings[action.rawValue] }
 
+    func diagnosticRows() -> [(String, String)] {
+        [
+            ("Assigned", "\(bindings.count)"),
+            ("Refused by macOS", failed.isEmpty ? "—" : failed.sorted().joined(separator: ", ")),
+        ]
+    }
+
     func set(_ hotkey: Hotkey?, for action: HotkeyAction) {
         if let hotkey {
             // A combination can only belong to one action.
@@ -162,6 +169,7 @@ struct HotkeyRecorder: View {
                 }
                 .buttonStyle(.plain)
                 .help(Text("Remove shortcut"))
+                .accessibilityLabel(Text("Remove shortcut"))
             }
         }
         .onDisappear(perform: stop)

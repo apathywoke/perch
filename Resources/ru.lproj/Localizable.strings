@@ -93,7 +93,6 @@
 "Apps shown in the island" = "Приложения, которые показывает остров";
 "Perch shows whatever macOS reports as “Now Playing”. Turn off an app, a browser for example, to ignore what it plays." = "Perch показывает то, что macOS считает «Исполняется». Отключите приложение, например браузер, чтобы не показывать его звук.";
 "Clear the list" = "Очистить список";
-"Perch cannot read “Now Playing” on this system. The media helper failed to start." = "Perch не может получить данные «Исполняется» в этой системе: вспомогательный процесс не запустился.";
 
 /* Shortcuts */
 "Global shortcuts" = "Глобальные сочетания клавиш";
@@ -135,3 +134,57 @@
 "Preview" = "Показать пример";
 "If Perch is already in the list and switched on, remove it with the “−” button and add it again: macOS keeps an entry for an older build." = "Если Perch уже есть в списке и включён, удалите его кнопкой «−» и добавьте снова: macOS хранит запись от старой сборки.";
 "This shortcut is already used by macOS or another app." = "Это сочетание уже занято macOS или другим приложением.";
+
+/* Island: VoiceOver */
+"Open %@" = "Открыть %@";
+"Artwork" = "Обложка";
+"Opens the player" = "Открывает плеер";
+"Playing: %@" = "Играет: %@";
+"Paused: %@" = "На паузе: %@";
+"Playback position" = "Позиция воспроизведения";
+"Unknown" = "Неизвестно";
+"%@ of %@" = "%@ из %@";
+"Muted" = "Без звука";
+
+/* Welcome window */
+"Welcome to Perch" = "Добро пожаловать в Perch";
+"Page %lld of %lld" = "Страница %lld из %lld";
+"Back" = "Назад";
+"Next" = "Далее";
+"Done" = "Готово";
+"Perch lives in the notch" = "Perch живёт в вырезе";
+"Click the notch to open the player." = "Нажмите на вырез, чтобы открыть плеер.";
+"Point at the notch to open the player. The delay can be changed in Settings." = "Наведите указатель на вырез, чтобы открыть плеер. Задержку можно изменить в настройках.";
+"Swipe sideways with two fingers on the island to switch tracks." = "Смахните двумя пальцами вбок по острову, чтобы переключить трек.";
+"Right-click the island or use the bird icon in the menu bar for Settings." = "Настройки открываются правым кликом по острову или через значок птицы в строке меню.";
+"Show the island" = "Показать остров";
+"Volume and brightness" = "Громкость и яркость";
+"Perch can show volume and brightness in the island instead of the system indicators." = "Perch может показывать громкость и яркость в острове вместо системных индикаторов.";
+"For this macOS asks for Accessibility access. Perch then receives only the media keys, never ordinary keystrokes." = "Для этого macOS запросит «Универсальный доступ». Perch получит только медиа-клавиши, обычный ввод с клавиатуры ему недоступен.";
+"The system indicators stay. You can change this later in Settings." = "Остаются системные индикаторы. Это можно изменить позже в настройках.";
+"Use Perch indicators" = "Использовать индикаторы Perch";
+"Access granted" = "Доступ разрешён";
+"Allow access" = "Разрешить доступ";
+"Keep the system indicators" = "Оставить системные индикаторы";
+"If macOS shows a request, click “Open System Settings” and switch Perch on." = "Если macOS покажет запрос, нажмите «Открыть Системные настройки» и включите Perch.";
+"Private by design" = "Приватность по умолчанию";
+"No network connections. Features that need the internet stay off until you turn them on." = "Никаких сетевых соединений. Функции, которым нужен интернет, выключены, пока вы их не включите.";
+"Diagnostics are copied to the clipboard only when you ask for them." = "Диагностика копируется в буфер обмена, только когда вы сами об этом попросите.";
+
+/* Backup source */
+"System “Now Playing”" = "Системное «Исполняется»";
+"Unavailable" = "Недоступно";
+"Try again" = "Повторить";
+"Working" = "Работает";
+"Follow Spotify and Music directly when needed" = "При необходимости следить за Spotify и «Музыкой» напрямую";
+"Backup source in use for %@" = "Запасной источник используется для %@";
+"Backup source" = "Запасной источник";
+"Spotify and Music announce what they play to any app. Perch uses this only when the system “Now Playing” service misses the music. To control them from the island in that case, macOS asks for permission once per app." = "Spotify и «Музыка» сообщают, что играет, любому приложению. Perch использует это, только если системное «Исполняется» не видит музыку. Чтобы управлять ими из острова в этом случае, macOS один раз спросит разрешение для каждого приложения.";
+"Control of Spotify or Music is requested only when the backup source is in use." = "Доступ к управлению Spotify или «Музыкой» запрашивается, только когда работает запасной источник.";
+
+/* Diagnostics */
+"Diagnostics" = "Диагностика";
+"Copy diagnostics" = "Скопировать диагностику";
+"Copied" = "Скопировано";
+"A report about Perch and this Mac for bug reports. It goes only to the clipboard and contains no track names." = "Отчёт о Perch и этом Mac для сообщений об ошибках. Он попадает только в буфер обмена и не содержит названий треков.";
+"Show the welcome screen" = "Показать знакомство";

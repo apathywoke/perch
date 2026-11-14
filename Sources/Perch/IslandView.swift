@@ -1,4 +1,5 @@
 import AppKit
+import PerchCore
 import SwiftUI
 
 /// The island outline: flat against the top screen edge, concave "ears" at the
@@ -37,6 +38,7 @@ struct IslandView: View {
     @AppStorage(Pref.hudStyle) private var hudStyle = HUDStyle.beside
     @AppStorage(Pref.swapSides) private var swapSides = false
     @AppStorage(Pref.visualizer) private var visualizer = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let s = scale
@@ -50,6 +52,8 @@ struct IslandView: View {
                                     active: model.active, scale: s, hud: hud == nil ? nil : hudStyle)
         let full = NotchLayout.size(phase: .expanded, notch: notch, hasNotch: model.hasNotch,
                                     active: model.active, scale: s)
+        let collapsed = NotchLayout.size(phase: .collapsed, notch: notch, hasNotch: model.hasNotch,
+                                         active: model.active, scale: s)
         let top = NotchLayout.topInset(hasNotch: model.hasNotch, notch: notch)
         let ear: CGFloat = expanded ? 18 : (peek ? 10 : NotchLayout.earRadius)
         let bottom: CGFloat = expanded ? 36 * s : (peek ? 24 : 10)
@@ -71,6 +75,10 @@ struct IslandView: View {
         let barsY = (expanded ? top + (NotchLayout.insetTop + NotchLayout.artwork / 2) * s
                      : (card ? size.height / 2 : notch.height / 2)) - VisualizerView.baseHeight / 2
 
+        // The open player's content starts at the collapsed island's width and
+        // grows with it, so nothing is uncovered from the sides.
+        let growFrom = min(0.95, max(0.6, collapsed.width / full.width))
+
         ZStack(alignment: .top) {
             shape.fill(.black)
                 .shadow(color: .black.opacity(expanded && shadow ? 0.38 : 0), radius: 22, y: 10)
@@ -79,20 +87,18 @@ struct IslandView: View {
                 if expanded {
                     ExpandedView(model: model, media: media, scale: s)
                         .frame(width: full.width, height: full.height)
-                        // Starts at the collapsed island's proportions, so text and controls
-                        // stretch out of the notch together with the island itself.
-                        .transition(.blurFade(x: min(1, (size.width) / full.width), y: 0.3))
+                        .transition(contentTransition(from: growFrom))
                 } else if let hud {
                     HUDView(state: hud, style: hudStyle, notch: notch, hasNotch: model.hasNotch, tint: media.tint,
                             wing: NotchLayout.hudWing)
                         .frame(width: size.width, height: size.height, alignment: .top)
-                        .transition(.blurFade(scale: 0.9))
+                        .transition(contentTransition(from: 0.9))
                 } else if card, let track = media.track {
                     PeekView(track: track)
                         .padding(.top, notch.height)
                         .padding(.horizontal, NotchLayout.peekSide)
                         .frame(width: size.width, height: size.height, alignment: .top)
-                        .transition(.blurFade(x: 0.85, y: 0.4))
+                        .transition(contentTransition(from: 0.9))
                 }
 
                 if expanded, let state = model.hud, model.hasNotch {
@@ -100,7 +106,7 @@ struct IslandView: View {
                             wing: (full.width - notch.width) / 2)
                         .frame(width: full.width, height: notch.height)
                         .background(.black)
-                        .transition(.blurFade(scale: 0.9))
+                        .transition(contentTransition(from: 0.9))
                         .zIndex(2)
                 }
 
@@ -120,19 +126,24 @@ struct IslandView: View {
                     .scaleEffect(showMedia ? 1 : 0.4)
                     .opacity(showMedia ? 1 : 0)
                     .offset(x: artX, y: artY)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(media.sourceName.map { Text("Open \($0)") } ?? Text("Artwork"))
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHidden(!expanded || !showMedia)
 
                 VisualizerView(playing: media.track?.isPlaying == true, tint: media.tint)
                     .scaleEffect(showMedia && visualizer ? barsScale : 0.3)
                     .opacity(showMedia && visualizer ? 1 : 0)
                     .offset(x: barsX, y: barsY)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             .frame(width: size.width, height: size.height, alignment: .top)
             .clipShape(NotchShape(topRadius: 0, bottomRadius: bottom))
         }
         .frame(width: size.width + ear * 2, height: size.height)
         .contentShape(shape)
-        .scaleEffect(model.hovering && !expanded ? 1.035 : 1, anchor: .top)
+        .scaleEffect(model.hovering && !expanded && !reduceMotion ? 1.03 : 1, anchor: .top)
         .onTapGesture {
             if !expanded { NotchController.shared.collapsedClicked() }
         }
@@ -141,10 +152,40 @@ struct IslandView: View {
             Divider()
             Button("Quit Perch") { NSApp.terminate(nil) }
         }
+        // VoiceOver: collapsed, the island is one button that says what plays and
+        // opens the player; expanded, its controls are reachable one by one.
+        .accessibilityElement(children: expanded ? .contain : .ignore)
+        .accessibilityLabel(Text(verbatim: "Perch"))
+        .accessibilityValue(accessibilitySummary)
+        .accessibilityHint(expanded ? Text(verbatim: "") : Text("Opens the player"))
+        .accessibilityAddTraits(expanded ? [] : .isButton)
+        .accessibilityAction { NotchController.shared.toggle() }
+        .accessibilityAction(named: Text("Play / pause")) { media.togglePlayPause() }
+        .accessibilityAction(named: Text("Next track")) { media.next() }
+        .accessibilityAction(named: Text("Previous track")) { media.previous() }
         .opacity(model.visible ? 1 : 0)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+    }
+
+    /// Content grows in from slightly smaller and blurred a beat after the shape
+    /// starts to move, and leaves quickly before the shape closes over it.
+    /// With "Reduce motion" it only fades.
+    private func contentTransition(from start: CGFloat) -> AnyTransition {
+        if reduceMotion {
+            return .asymmetric(insertion: .opacity.animation(Motion.contentIn),
+                               removal: .opacity.animation(Motion.contentOut))
+        }
+        return .asymmetric(insertion: .blurFade(scale: start).animation(Motion.contentIn),
+                           removal: .blurFade(scale: max(start, 0.94)).animation(Motion.contentOut))
+    }
+
+    private var accessibilitySummary: Text {
+        if let hud = model.hud { return Text(verbatim: hud.spokenDescription) }
+        guard let track = media.track else { return Text("Nothing is playing") }
+        let name = track.artist.isEmpty ? track.title : "\(track.title) — \(track.artist)"
+        return track.isPlaying ? Text("Playing: \(name)") : Text("Paused: \(name)")
     }
 }
 
@@ -171,22 +212,19 @@ private struct PeekView: View {
 
 private struct BlurFade: ViewModifier {
     let active: Bool
-    let x: CGFloat
-    let y: CGFloat
+    let scale: CGFloat
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(x: active ? x : 1, y: active ? y : 1, anchor: .top)
-            .blur(radius: active ? 9 : 0)
+            .scaleEffect(active ? scale : 1, anchor: .top)
+            .blur(radius: active ? 8 : 0)
             .opacity(active ? 0 : 1)
     }
 }
 
 private extension AnyTransition {
-    static func blurFade(scale: CGFloat) -> AnyTransition { blurFade(x: scale, y: scale) }
-
-    static func blurFade(x: CGFloat, y: CGFloat) -> AnyTransition {
-        .modifier(active: BlurFade(active: true, x: x, y: y), identity: BlurFade(active: false, x: x, y: y))
+    static func blurFade(scale: CGFloat) -> AnyTransition {
+        .modifier(active: BlurFade(active: true, scale: scale), identity: BlurFade(active: false, scale: scale))
     }
 }
 
@@ -202,34 +240,38 @@ private struct HUDView: View {
     @AppStorage(Pref.hudPercent) private var showPercent = true
     @AppStorage(Pref.hudColor) private var colorMode = VisualizerColor.white
 
-    private var level: Double { state.kind == .volume && state.muted ? 0 : state.value }
+    private var level: Double { state.level }
 
     var body: some View {
-        if hasNotch, style == .beside {
-            HStack(spacing: 0) {
-                icon.frame(width: wing - 18, alignment: .leading).padding(.leading, 18)
-                Spacer(minLength: 0)
-                HStack(spacing: 7) {
-                    bar
-                    if showPercent { percent }
+        Group {
+            if hasNotch, style == .beside {
+                HStack(spacing: 0) {
+                    icon.frame(width: wing - 18, alignment: .leading).padding(.leading, 18)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 7) {
+                        bar
+                        if showPercent { percent }
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(width: wing)
                 }
-                .padding(.horizontal, 14)
-                .frame(width: wing)
-            }
-            .frame(height: notch.height)
-        } else {
-            VStack(spacing: 0) {
-                if hasNotch { Color.clear.frame(height: notch.height) }
-                HStack(spacing: 12) {
-                    icon
-                    bar
-                    if showPercent { percent }
+                .frame(height: notch.height)
+            } else {
+                VStack(spacing: 0) {
+                    if hasNotch { Color.clear.frame(height: notch.height) }
+                    HStack(spacing: 12) {
+                        icon
+                        bar
+                        if showPercent { percent }
+                    }
+                    .padding(.horizontal, 20)
+                    .frame(height: hasNotch ? NotchLayout.hudRow : notch.height)
+                    .offset(y: hasNotch ? -3 : 0)
                 }
-                .padding(.horizontal, 20)
-                .frame(height: hasNotch ? NotchLayout.hudRow : notch.height)
-                .offset(y: hasNotch ? -3 : 0)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: state.spokenDescription))
     }
 
     private var icon: some View {
@@ -305,6 +347,7 @@ private struct ExpandedView: View {
                         }
                     }
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             Group {
                 if let track = media.track {
@@ -313,6 +356,7 @@ private struct ExpandedView: View {
                     VStack(spacing: 8 * s) {
                         Image(systemName: "music.note")
                             .font(.system(size: 22 * s, weight: .medium))
+                            .accessibilityHidden(true)
                         Text("Nothing is playing")
                             .font(.system(size: 13 * s, weight: .medium))
                     }
@@ -329,6 +373,7 @@ private struct ExpandedView: View {
     private func player(_ track: Track, s: CGFloat) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 13 * s) {
+                // The artwork itself is drawn by IslandView so it can travel from the collapsed island.
                 Color.clear.frame(width: NotchLayout.artwork * s, height: NotchLayout.artwork * s)
 
                 VStack(alignment: .leading, spacing: 2 * s) {
@@ -348,6 +393,7 @@ private struct ExpandedView: View {
                 }
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
 
                 Color.clear.frame(width: 34 * s, height: 1)
             }
@@ -356,9 +402,10 @@ private struct ExpandedView: View {
                 .frame(height: 16 * s)
             Spacer(minLength: 0)
             HStack(spacing: 30 * s) {
-                ControlButton(symbol: "backward.fill", size: 17 * s) { media.previous() }
-                ControlButton(symbol: track.isPlaying ? "pause.fill" : "play.fill", size: 25 * s) { media.togglePlayPause() }
-                ControlButton(symbol: "forward.fill", size: 17 * s) { media.next() }
+                ControlButton(symbol: "backward.fill", size: 17 * s, label: "Previous track") { media.previous() }
+                ControlButton(symbol: track.isPlaying ? "pause.fill" : "play.fill", size: 25 * s,
+                              label: track.isPlaying ? "Pause" : "Play") { media.togglePlayPause() }
+                ControlButton(symbol: "forward.fill", size: 17 * s, label: "Next track") { media.next() }
             }
         }
     }
@@ -396,6 +443,7 @@ struct VisualizerView: View {
     let playing: Bool
     let tint: Color
     @AppStorage(Pref.visualizerColor) private var colorMode = VisualizerColor.artwork
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let baseHeight: CGFloat = 16
     static let barWidth: CGFloat = 3
@@ -408,13 +456,15 @@ struct VisualizerView: View {
         case .white: .white
         case .accent: .controlAccentColor
         }
-        BarsRepresentable(playing: playing, color: color, barWidth: Self.barWidth, spacing: Self.spacing)
+        BarsRepresentable(playing: playing, animated: !reduceMotion, color: color,
+                          barWidth: Self.barWidth, spacing: Self.spacing)
             .frame(width: Self.baseWidth, height: Self.baseHeight)
     }
 }
 
 struct BarsRepresentable: NSViewRepresentable {
     let playing: Bool
+    let animated: Bool
     let color: NSColor
     let barWidth: CGFloat
     let spacing: CGFloat
@@ -422,14 +472,18 @@ struct BarsRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> BarsView { BarsView() }
 
     func updateNSView(_ view: BarsView, context: Context) {
-        view.configure(playing: playing, color: color, barWidth: barWidth, spacing: spacing)
+        view.configure(playing: playing, animated: animated, color: color, barWidth: barWidth, spacing: spacing)
     }
 }
 
 final class BarsView: NSView {
     static let count = 5
+    /// Resting heights while playing with "Reduce motion" on: still reads as music.
+    private static let stillLevels: [CGFloat] = [0.55, 0.85, 0.45, 0.75, 0.6]
+
     private let bars: [CALayer] = (0..<BarsView.count).map { _ in CALayer() }
     private var playing = false
+    private var animated = true
     private var barWidth: CGFloat = 3
     private var spacing: CGFloat = 2
     private var animatedHeight: CGFloat = 0
@@ -442,9 +496,10 @@ final class BarsView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    func configure(playing: Bool, color: NSColor, barWidth: CGFloat, spacing: CGFloat) {
-        let restart = playing != self.playing
+    func configure(playing: Bool, animated: Bool, color: NSColor, barWidth: CGFloat, spacing: CGFloat) {
+        let restart = playing != self.playing || animated != self.animated
         self.playing = playing
+        self.animated = animated
         self.barWidth = barWidth
         self.spacing = spacing
         CATransaction.begin()
@@ -464,19 +519,21 @@ final class BarsView: NSView {
     override func layout() {
         super.layout()
         let height = bounds.height
+        let bouncing = playing && animated
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for (index, bar) in bars.enumerated() {
             bar.cornerRadius = barWidth / 2
             bar.position = CGPoint(x: CGFloat(index) * (barWidth + spacing) + barWidth / 2, y: height / 2)
-            if bar.bounds.width != barWidth || !playing {
-                bar.bounds = CGRect(x: 0, y: 0, width: barWidth, height: max(barWidth, height * 0.2))
+            if bar.bounds.width != barWidth || !bouncing {
+                let level = playing ? Self.stillLevels[index] : 0.2
+                bar.bounds = CGRect(x: 0, y: 0, width: barWidth, height: max(barWidth, height * level))
             }
         }
         CATransaction.commit()
 
         guard window != nil, height > 0 else { return }
-        if !playing {
+        if !bouncing {
             bars.forEach { $0.removeAnimation(forKey: "bounce") }
         } else if animatedHeight != height {
             animatedHeight = height
@@ -510,12 +567,6 @@ private struct ScrubberView: NSViewRepresentable {
     func updateNSView(_ view: ScrubberNSView, context: Context) {
         view.seek = seek
         view.configure(track: track, scale: scale, showRemaining: timeStyle == .remaining)
-    }
-
-    static func format(_ seconds: Double) -> String {
-        let total = Int(max(0, seconds.rounded(.down)))
-        let h = total / 3600, m = (total % 3600) / 60, s = total % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
     }
 }
 
@@ -642,8 +693,8 @@ final class ScrubberNSView: NSView {
             return
         }
         let shown = dragFraction.map { Double($0) * track.duration } ?? track.position()
-        leftLabel.string = ScrubberView.format(shown)
-        rightLabel.string = showRemaining ? "-" + ScrubberView.format(track.duration - shown) : ScrubberView.format(track.duration)
+        leftLabel.string = TimeText.format(shown)
+        rightLabel.string = showRemaining ? "-" + TimeText.format(track.duration - shown) : TimeText.format(track.duration)
     }
 
     // MARK: Mouse
@@ -674,11 +725,33 @@ final class ScrubberNSView: NSView {
 
     override func mouseEntered(with event: NSEvent) { hovering = true; needsLayout = true }
     override func mouseExited(with event: NSEvent) { hovering = false; needsLayout = true }
+
+    // MARK: VoiceOver: an adjustable slider that moves in 10-second steps
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .slider }
+    override func accessibilityLabel() -> String? { NSLocalizedString("Playback position", comment: "") }
+
+    override func accessibilityValue() -> Any? {
+        guard let track, track.duration > 0 else { return NSLocalizedString("Unknown", comment: "") }
+        return String(format: NSLocalizedString("%@ of %@", comment: "position of duration"),
+                      TimeText.format(track.position()), TimeText.format(track.duration))
+    }
+
+    override func accessibilityPerformIncrement() -> Bool { step(by: 10) }
+    override func accessibilityPerformDecrement() -> Bool { step(by: -10) }
+
+    private func step(by seconds: Double) -> Bool {
+        guard let track, track.duration > 0 else { return false }
+        seek?(min(max(track.position() + seconds, 0), track.duration))
+        return true
+    }
 }
 
 private struct ControlButton: View {
     let symbol: String
     let size: CGFloat
+    let label: LocalizedStringKey
     let action: () -> Void
     @State private var hovering = false
 
@@ -695,6 +768,7 @@ private struct ControlButton: View {
         .buttonStyle(PressStyle())
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: hovering)
+        .accessibilityLabel(Text(label))
     }
 
     private struct PressStyle: ButtonStyle {
