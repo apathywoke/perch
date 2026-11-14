@@ -263,8 +263,9 @@
 "No releases have been published yet." = "Релизов пока нет.";
 "The connection failed." = "Не удалось подключиться.";
 "Highlight word by word" = "Подсвечивать по словам";
-"Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise." = "Если в LRCLIB есть время каждого слова, подсветка точная; иначе время слов оценивается по времени строки.";
 "Amount of text" = "Объём текста";
 "How many lines of lyrics the open player shows at once." = "Сколько строк текста раскрытый плеер показывает одновременно.";
 "Few lines" = "Мало строк";
 "Many lines" = "Много строк";
+"Timing correction" = "Поправка синхронизации";
+"Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise. If the lyrics run ahead of the singing, move the slider to the right; if they lag behind, to the left. Bluetooth headphones often need about +0.2 s." = "Если в LRCLIB есть время каждого слова, подсветка точная; иначе время слов оценивается по времени строки. Если текст опережает пение, сдвиньте ползунок вправо, если отстаёт — влево. Для Bluetooth-наушников обычно нужно около +0,2 с.";

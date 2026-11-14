@@ -478,6 +478,7 @@ private struct LyricsPane: View {
     @AppStorage(Pref.lyricsSize) private var size = LyricsSize.medium
     @AppStorage(Pref.lyricsWordByWord) private var wordByWord = true
     @AppStorage(Pref.lyricsSpace) private var space = LyricsSpace.medium
+    @AppStorage(Pref.lyricsDelay) private var delay = 0.0
 
     var body: some View {
         Form {
@@ -494,8 +495,12 @@ private struct LyricsPane: View {
             if enabled {
                 Section {
                     Toggle("Highlight word by word", isOn: $wordByWord)
+                    SliderRow(title: "Timing correction", value: $delay, range: -1...1, step: 0.05) { value in
+                        String(format: NSLocalizedString("%.2f s", comment: "seconds"), value)
+                            .replacingOccurrences(of: "-", with: "−")
+                    }
                 } footer: {
-                    Text("Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise.")
+                    Text("Word timing is exact when LRCLIB has it for the song and estimated from the line timing otherwise. If the lyrics run ahead of the singing, move the slider to the right; if they lag behind, to the left. Bluetooth headphones often need about +0.2 s.")
                 }
                 Section {
                     TilePicker(selection: $space, options: LyricsSpace.allCases.map { option in

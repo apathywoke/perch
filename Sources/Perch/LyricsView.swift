@@ -60,9 +60,9 @@ struct LyricsPanel: View {
 /// starts, worked out from the real clock, so the highlight neither runs
 /// ahead nor lags behind the song.
 final class LyricsClock: ObservableObject {
-    /// Lines and words light up this much early rather than late; it also
-    /// absorbs rounding right at a line's start.
-    static let lead = 0.06
+    /// Absorbs rounding right at a line's start, plus the user's timing
+    /// correction (positive delays the lyrics).
+    static var lead: Double { 0.02 - Pref.double(Pref.lyricsDelay) }
 
     @Published private(set) var current: Int?
     private var lines: [LyricLine] = []
@@ -109,6 +109,7 @@ private struct SyncedLyricsView: View {
     @StateObject private var clock = LyricsClock()
     @State private var heights: [Int: CGFloat] = [:]
     @State private var ready = false
+    @AppStorage(Pref.lyricsDelay) private var delay = 0.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Where the current line rests: a little above the middle, as in Apple Music.
@@ -117,9 +118,9 @@ private struct SyncedLyricsView: View {
     var body: some View {
         let spacing = fontSize * 0.6
         GeometryReader { geometry in
+            let tops = lineTops(spacing: spacing)
             let focus = clock.current ?? 0
-            let top = lines.prefix(focus).reduce(CGFloat(0)) { $0 + (heights[$1.id] ?? fontSize * 1.25) + spacing }
-            let offset = (geometry.size.height * anchor - top).rounded()
+            let offset = (geometry.size.height * anchor - (tops.indices.contains(focus) ? tops[focus] : 0)).rounded()
             VStack(alignment: .leading, spacing: spacing) {
                 ForEach(lines) { line in
                     let distance = clock.current.map { line.id - $0 } ?? line.id + 1
@@ -133,6 +134,9 @@ private struct SyncedLyricsView: View {
                         .offset(y: offset)
                         .animation(ready ? scroll(for: distance) : nil, value: offset)
                         .onTapGesture { seek(line.time) }
+                        // Lines scrolled out of the panel still sit over the player's
+                        // buttons; they must not take those clicks.
+                        .allowsHitTesting(isInside(line, tops: tops, offset: offset, height: geometry.size.height))
                 }
                 Text("Lyrics from LRCLIB")
                     .font(.system(size: 10 * scale, weight: .medium))
@@ -155,6 +159,7 @@ private struct SyncedLyricsView: View {
             ready = false
             clock.follow(new, track)
         }
+        .onChange(of: delay) { _, _ in clock.follow(lines, track) }
         .onDisappear { clock.stop() }
         .mask {
             LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.16),
@@ -163,6 +168,23 @@ private struct SyncedLyricsView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Lyrics"))
+    }
+
+    /// Top of each line in the list, from the measured heights.
+    private func lineTops(spacing: CGFloat) -> [CGFloat] {
+        var tops: [CGFloat] = []
+        var y: CGFloat = 0
+        for line in lines {
+            tops.append(y)
+            y += (heights[line.id] ?? fontSize * 1.25) + spacing
+        }
+        return tops
+    }
+
+    private func isInside(_ line: LyricLine, tops: [CGFloat], offset: CGFloat, height: CGFloat) -> Bool {
+        guard tops.indices.contains(line.id) else { return false }
+        let top = tops[line.id] + offset
+        return top >= 0 && top < height - fontSize
     }
 
     /// The list moves like a wave rather than a block: the line now being sung
