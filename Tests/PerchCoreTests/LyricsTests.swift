@@ -193,7 +193,7 @@ struct WordTimingTests {
 @Suite("Player latency")
 struct PlayerLatencyTests {
     @Test func onlySpotifyIsCorrected() {
-        #expect(PlayerLatency.seconds(for: "com.spotify.client") == 0.3)
+        #expect(PlayerLatency.seconds(for: "com.spotify.client") == 0.15)
         #expect(PlayerLatency.seconds(for: "com.apple.Music") == 0)
         #expect(PlayerLatency.seconds(for: nil) == 0)
     }
