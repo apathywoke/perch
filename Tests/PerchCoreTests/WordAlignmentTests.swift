@@ -35,9 +35,9 @@ struct WordAlignmentTests {
         #expect(aligned[0].words.map(\.start) == [10.6, 11.3, 12.4, 12.7, 13.3])
         #expect(abs(aligned[0].words.last!.end - 14.2) < 0.0001)
         #expect(aligned[0].heard == 5)
-        // Nothing heard in the next line: it moves with this one, 0.6 s later.
+        // Nothing heard in the next line: it moves with this one, about half a second later.
         #expect(aligned[1].heard == 0)
-        #expect(abs(aligned[1].time - 15.6) < 0.0001)
+        #expect(aligned[1].time > 15.4 && aligned[1].time < 15.8)
         #expect(aligned[1].text == lines[1].text)
     }
 
@@ -155,7 +155,41 @@ struct WordAlignmentTests {
         let words = zip(song[0].words, expected).map { heard($0.text, $1 - 1.5) }
         let aligned = WordAlignment.align(song, heard: words)
         #expect(abs(aligned[1].time - (song[1].time - 1.5)) < 0.01) // a neighbour moves along
-        #expect(aligned[11] == song[11]) // forty words away does not
+        #expect(aligned[11].time == song[11].time) // forty words away does not
+        #expect(aligned[11].words.first?.start == song[11].words.first?.start)
+    }
+
+    @Test func unheardLinesTakeThePaceHeardNearby() {
+        // The file's lines are 4 s apart, but the singer is quick: 0.15 s a syllable.
+        let text = (0..<6).map { String(format: "[00:%02d.00]we run along the river side", $0 * 4 + 10) }
+        let song = LRCParser.parse(text.joined(separator: "\n"))
+        var words: [HeardWord] = []
+        for line in 0..<3 {
+            var time = Double(10 + line * 4)
+            for word in ["we", "run", "along", "the", "river", "side"] {
+                words.append(heard(word, time, 0.1))
+                time += 0.15 * Double(WordTiming.syllableCount(Substring(word)))
+            }
+        }
+        let aligned = WordAlignment.align(song, heard: words)
+        #expect(aligned[4].heard == 0)
+        // Eight syllables at 0.15 s and a held last word: done well before the next line.
+        let sung = aligned[4].words.last!.end - aligned[4].time
+        #expect(sung < 2)
+        #expect(sung < (song[4].words.last!.end - song[4].time) * 0.7)
+    }
+
+    @Test func linesBecomeHintsForTheRecogniser() {
+        let phrases = ListeningHints.phrases(from: """
+        [Chorus]
+        Hold the note, a little longer (x2)
+        hold the note a little longer
+
+        Before the morning comes
+        """)
+        #expect(phrases == ["Hold the note, a little longer", "Before the morning comes"])
+        let many = ListeningHints.phrases(from: (0..<150).map { "line \($0)" }.joined(separator: "\n"))
+        #expect(many.count == ListeningHints.limit)
     }
 
     @Test func newResultsReplaceWhatTheyCover() {

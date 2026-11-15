@@ -145,12 +145,17 @@ public enum LRCParser {
 public enum WordTiming {
     /// Seconds per syllable when nothing better is known: a moderate singing pace.
     static let secondsPerSyllable = 0.3
+    /// How much longer than its syllables say the last word of a line lasts:
+    /// singers hold the end of a phrase.
+    static let held = 1.6
 
     /// Gives every line its words with timing. Lines from enhanced LRC keep
     /// their exact times; for the others the time until the next line is
-    /// shared out by syllables. A break gets three dots spread over the pause.
+    /// shared out by syllables, at the pace of this song. A break gets three
+    /// dots spread over the pause.
     static func assign(_ entries: [(line: LyricLine, segments: [LRCParser.Segment])]) -> [LyricLine] {
-        entries.indices.map { index in
+        let pace = pace(of: entries.map(\.line))
+        return entries.indices.map { index in
             var line = entries[index].line
             let next = index + 1 < entries.count ? entries[index + 1].line.time : nil
             let available = max(0.3, (next ?? line.time + 6) - line.time)
@@ -169,24 +174,48 @@ public enum WordTiming {
                               end: line.time + available * Double(dot + 1) / 3)
                 }
             } else {
-                line.words = spread(line.text, from: line.time, over: singingTime(for: line.text, available: available))
+                line.words = spread(line.text, from: line.time,
+                                    over: singingTime(for: line.text, available: available, pace: pace), holdingLast: true)
             }
             return line
         }
     }
 
-    /// How long a line is sung: its natural length at a moderate pace, stretched
-    /// towards the time available but never into a long instrumental gap.
-    static func singingTime(for text: String, available: Double) -> Double {
+    /// Seconds per syllable in this song, judged from how closely its lines
+    /// follow each other. A line followed straight away by the next is sung
+    /// over nearly all of its time; lines before a pause say little, so the
+    /// tighter quarter of the lines decides. A rap verse comes out near 0.15 s,
+    /// a ballad near 0.4 s.
+    static func pace(of lines: [LyricLine]) -> Double {
+        var samples: [Double] = []
+        for (line, next) in zip(lines, lines.dropFirst()) where !line.text.isEmpty {
+            let syllables = Double(words(of: line.text).map(syllableCount).reduce(0, +))
+            let available = next.time - line.time
+            guard syllables >= 4, available > 0.5 else { continue }
+            samples.append((available - 0.2) / syllables)
+        }
+        guard samples.count >= 4 else { return secondsPerSyllable }
+        samples.sort()
+        return min(0.45, max(0.12, samples[samples.count / 4]))
+    }
+
+    /// How long a line is sung: its natural length at the song's pace, stretched
+    /// towards the time available but never into a long instrumental gap. A pace
+    /// `heard` in the song itself is trusted, and the line is stretched only a little.
+    static func singingTime(for text: String, available: Double, pace: Double = secondsPerSyllable,
+                            heard: Bool = false) -> Double {
         let syllables = Double(words(of: text).map(syllableCount).reduce(0, +))
-        let natural = syllables * secondsPerSyllable + 0.2
+        let natural = syllables * pace + 0.2
+        if heard { return min(available * 0.92, natural * 1.25) }
         return min(available * 0.92, max(natural, min(available * 0.6, natural * 2.2)))
     }
 
-    /// Shares `duration` among the words of `text` by syllables.
-    static func spread(_ text: String, from start: Double, over duration: Double) -> [LyricWord] {
+    /// Shares `duration` among the words of `text` by syllables. With
+    /// `holdingLast`, the words end a phrase and the last one is held longer.
+    static func spread(_ text: String, from start: Double, over duration: Double, holdingLast: Bool = false) -> [LyricWord] {
         let parts = words(of: text)
-        let weights = parts.map { Double(syllableCount($0)) }
+        var weights = parts.map { Double(syllableCount($0)) }
+        if holdingLast, weights.count > 1 { weights[weights.count - 1] *= held }
         let total = weights.reduce(0, +)
         guard total > 0 else { return [] }
         var time = start

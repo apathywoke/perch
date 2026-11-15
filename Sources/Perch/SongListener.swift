@@ -152,15 +152,17 @@ final class SongListener: ObservableObject {
         }
         if #available(macOS 26.0, *) {
             let key = "\(bundleId)\u{1}\(recognizer.locale.identifier)\u{1}\(recognizer.dictation)"
+            let phrases = ListeningHints.phrases(from: lyrics.text)
             if let engine = engine as? ListeningEngine, engineKey == key {
-                engine.update(track)
+                engine.update(track, phrases: phrases)
                 return
             }
             if case .failed = status, engineKey == key { return } // don't retry in a loop
             stopEngine()
             engineKey = key
             status = .preparing
-            let engine = ListeningEngine(bundleId: bundleId, recognizer: recognizer, track: track) { [weak self] event in
+            let engine = ListeningEngine(bundleId: bundleId, recognizer: recognizer, track: track,
+                                         phrases: phrases) { [weak self] event in
                 self?.handle(event)
             }
             self.engine = engine
@@ -349,7 +351,8 @@ enum HeardStore {
 
     /// Raised whenever what was stored before can no longer be trusted. 2: the
     /// first files were heard while Spotify's position could be seconds off.
-    static let version = 2
+    /// 3: the recogniser now knows the lyrics and catches far more words.
+    static let version = 3
 
     private struct Stored: Codable {
         let version: Int
@@ -359,10 +362,13 @@ enum HeardStore {
     static func load(_ id: String) -> HeardTranscript? {
         let url = file(for: id)
         guard let data = try? Data(contentsOf: url) else { return nil }
-        guard let stored = try? JSONDecoder().decode(Stored.self, from: data), stored.version == version else {
+        guard let stored = try? JSONDecoder().decode(Stored.self, from: data), stored.version >= 2 else {
             try? FileManager.default.removeItem(at: url) // outdated: listen again
             return nil
         }
+        // Heard without the lyrics as hints: keep the words until better ones
+        // replace them, but listen to the song again.
+        if stored.version == 2 { return HeardTranscript(words: stored.transcript.words) }
         return stored.transcript
     }
 
@@ -396,6 +402,8 @@ final class ListeningEngine {
     private let tap = AudioTap()
     private let lock = NSLock()
     private var track: Track
+    /// The lines of the song's lyrics, as hints for the recogniser.
+    private var phrases: [String]
     private var session: RecognitionSession?
     private var latency: Double = 0
     private var shift: Double = 0
@@ -403,11 +411,12 @@ final class ListeningEngine {
     private var heardSound = false
     private var silentSeconds = 0.0
 
-    init(bundleId: String, recognizer: SongListener.Recognizer, track: Track,
+    init(bundleId: String, recognizer: SongListener.Recognizer, track: Track, phrases: [String],
          report: @escaping (SongListener.Event) -> Void) {
         self.bundleId = bundleId
         self.recognizer = recognizer
         self.track = track
+        self.phrases = phrases
         self.report = report
         self.shift = LyricsClock.shift(for: track) + Pref.double(Pref.lyricsDelay)
     }
@@ -438,10 +447,16 @@ final class ListeningEngine {
         }
     }
 
-    /// New playback state from the player (main thread).
-    func update(_ track: Track) {
+    /// New playback state from the player, and the lyrics on show (main thread).
+    func update(_ track: Track, phrases: [String]) {
         lock.lock()
         self.track = track
+        if phrases != self.phrases {
+            // Another song: the next stretch is heard with its own lines in mind.
+            self.phrases = phrases
+            session?.finish()
+            session = nil
+        }
         // The lyrics' own timeline: the player's position with Perch's usual correction,
         // but without the user's (that one applies when showing).
         shift = LyricsClock.shift(for: track) + Pref.double(Pref.lyricsDelay)
@@ -480,7 +495,7 @@ final class ListeningEngine {
         }
         if session == nil {
             let report = self.report
-            session = RecognitionSession(recognizer: recognizer) { words, from, to, listened in
+            session = RecognitionSession(recognizer: recognizer, phrases: phrases) { words, from, to, listened in
                 DispatchQueue.main.async { report(.heard(words: words, from: from, to: to, listened: listened)) }
             }
             DispatchQueue.main.async { report(.listening) }
@@ -548,9 +563,9 @@ final class RecognitionSession {
                                  attributeOptions: [.audioTimeRange])
     }
 
-    init(recognizer: SongListener.Recognizer, output: @escaping Output) {
+    init(recognizer: SongListener.Recognizer, phrases: [String], output: @escaping Output) {
         self.output = output
-        Task { await prepare(recognizer) }
+        Task { await prepare(recognizer, phrases: phrases) }
     }
 
     /// Where the next sound would land in the song, while the session is running.
@@ -566,10 +581,21 @@ final class RecognitionSession {
         return anchor.song + time - anchor.fed
     }
 
-    private func prepare(_ recognizer: SongListener.Recognizer) async {
+    private func prepare(_ recognizer: SongListener.Recognizer, phrases: [String]) async {
         let module = Self.makeModule(recognizer, live: true)
         let analyzer = SpeechAnalyzer(modules: [module])
         guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else { return }
+        if !phrases.isEmpty {
+            // The lyrics tell the recogniser which words to listen for.
+            let context = AnalysisContext()
+            context.contextualStrings[.general] = phrases
+            do {
+                try await analyzer.setContext(context)
+                if SongListener.debug { SongListener.log.notice("Hints: \(phrases.count, privacy: .public) lines") }
+            } catch {
+                SongListener.log.error("Hints not taken: \(error.localizedDescription, privacy: .public)")
+            }
+        }
         do {
             try await analyzer.prepareToAnalyze(in: format)
         } catch {

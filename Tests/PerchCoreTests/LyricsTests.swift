@@ -150,12 +150,41 @@ struct WordTimingTests {
         #expect(!line.wordSynced)
         #expect(line.words.map(\.text) == ["Hello", "world"])
         #expect(line.words.first?.start == 10)
-        // "Hello" has two syllables, "world" one: twice as long.
+        // "Hello" has two syllables, "world" one, but ends the phrase and is held.
         let hello = line.words[0].end - line.words[0].start
         let world = line.words[1].end - line.words[1].start
-        #expect(abs(hello - 2 * world) < 0.0001)
+        #expect(abs(hello - 2 * world / WordTiming.held) < 0.0001)
         #expect(line.words[0].end == line.words[1].start)
         #expect(try #require(line.words.last).end < 14)
+    }
+
+    @Test func paceFollowsHowTightlyLinesFollowEachOther() {
+        func song(every seconds: Double) -> [LyricLine] {
+            LRCParser.parse((0..<8).map {
+                String(format: "[00:%05.2f]we run along the river side", 10 + Double($0) * seconds)
+            }.joined(separator: "\n"))
+        }
+        // Eight syllables a line: 2 s apart is a fast verse, 4 s a slow one.
+        let fast = WordTiming.pace(of: song(every: 2))
+        let slow = WordTiming.pace(of: song(every: 4))
+        #expect(abs(fast - 0.225) < 0.001)
+        #expect(abs(slow - 0.45) < 0.001)
+        // The fast song's first line is sung in about two seconds, not stretched to the default pace.
+        let line = song(every: 2)[0]
+        #expect(line.words.last!.end <= 12)
+        #expect(line.words.last!.end > 11.5)
+    }
+
+    @Test func tooFewLinesKeepTheDefaultPace() {
+        let lines = LRCParser.parse("[00:10.00]Hello world again today\n[00:12.00]Next")
+        #expect(WordTiming.pace(of: lines) == WordTiming.secondsPerSyllable)
+    }
+
+    @Test func theLastWordOfALineIsHeld() throws {
+        let line = try #require(LRCParser.parse("[00:10.00]go go go\n[00:20.00]Next").first)
+        let lengths = line.words.map { $0.end - $0.start }
+        #expect(abs(lengths[2] - lengths[0] * WordTiming.held) < 0.0001)
+        #expect(abs(lengths[0] - lengths[1]) < 0.0001)
     }
 
     @Test func fastLinesFinishBeforeTheNextOne() throws {

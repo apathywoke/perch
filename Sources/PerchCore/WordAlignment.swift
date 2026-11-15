@@ -215,13 +215,24 @@ public enum WordAlignment {
             lineShift[index] = upcoming
         }
 
+        // How fast this song is really sung, where enough words were heard close together.
+        let heardPace = pace(slots, pairs, lines: lines)
+        let pace = heardPace ?? WordTiming.pace(of: lines)
+
         var result = lines
         for index in lines.indices where !lines[index].wordSynced {
             let shifted = moved(lines[index], by: lineShift[index])
             let previous = index > 0 ? result[index - 1].time : 0
+            let next = index + 1 < lines.count ? lines[index + 1].time + lineShift[index + 1] : nil
             if let lineAnchors = anchors[index] {
-                let next = index + 1 < lines.count ? lines[index + 1].time + lineShift[index + 1] : nil
-                result[index] = retime(shifted, anchors: lineAnchors, previous: previous, next: next)
+                result[index] = retime(shifted, anchors: lineAnchors, previous: previous, next: next, pace: pace)
+            } else if heardPace != nil, !shifted.text.isEmpty {
+                // Nothing recognised in this line: spread it again at the pace heard nearby.
+                var line = shifted
+                let available = max(0.3, (next ?? line.time + 6) - line.time)
+                let sung = WordTiming.singingTime(for: line.text, available: available, pace: pace, heard: true)
+                line.words = WordTiming.spread(line.text, from: line.time, over: sung, holdingLast: true)
+                result[index] = line
             } else {
                 result[index] = shifted
             }
@@ -254,6 +265,23 @@ public enum WordAlignment {
         }
     }
 
+    /// Seconds per syllable between words heard in the same line, when there
+    /// are enough such pairs to go by; nil otherwise.
+    static func pace(_ slots: [Slot], _ pairs: [Int: HeardWord], lines: [LyricLine]) -> Double? {
+        let matched = pairs.keys.sorted()
+        var samples: [Double] = []
+        for (a, b) in zip(matched, matched.dropFirst()) where slots[a].line == slots[b].line {
+            let words = lines[slots[a].line].words[slots[a].word..<slots[b].word]
+            let syllables = Double(words.map { WordTiming.syllableCount(Substring($0.text)) }.reduce(0, +))
+            let elapsed = pairs[b]!.start - pairs[a]!.start
+            guard syllables > 0, elapsed > 0.05, elapsed < 4 else { continue }
+            samples.append(elapsed / syllables)
+        }
+        guard samples.count >= 5 else { return nil }
+        samples.sort()
+        return min(0.5, max(0.1, samples[samples.count / 2]))
+    }
+
     /// A line with all its timing moved by `shift` seconds.
     static func moved(_ line: LyricLine, by shift: Double) -> LyricLine {
         guard shift != 0 else { return line }
@@ -262,8 +290,10 @@ public enum WordAlignment {
                          wordSynced: line.wordSynced, heard: line.heard)
     }
 
-    /// One line: anchored words take the heard times, the rest share the gaps by syllables.
-    static func retime(_ line: LyricLine, anchors: [Int: HeardWord], previous: Double, next: Double?) -> LyricLine {
+    /// One line: anchored words take the heard times, the rest share the gaps
+    /// by syllables, at `pace` seconds per syllable where nothing bounds them.
+    static func retime(_ line: LyricLine, anchors: [Int: HeardWord], previous: Double, next: Double?,
+                       pace: Double = WordTiming.secondsPerSyllable) -> LyricLine {
         let old = line.words
         var starts = old.map(\.start)
         var ends = old.map(\.end)
@@ -272,10 +302,14 @@ public enum WordAlignment {
             starts[key] = anchors[key]!.start
             ends[key] = anchors[key]!.end
         }
-        func fill(_ range: Range<Int>, from: Double, to: Double) {
+        func syllables(_ range: Range<Int>) -> Double {
+            Double(old[range].map { WordTiming.syllableCount(Substring($0.text)) }.reduce(0, +))
+        }
+        func fill(_ range: Range<Int>, from: Double, to: Double, holdingLast: Bool = false) {
             guard !range.isEmpty else { return }
             let words = old[range].map(\.text)
-            let spread = WordTiming.spread(words.joined(separator: " "), from: from, over: max(0.05, to - from))
+            let spread = WordTiming.spread(words.joined(separator: " "), from: from, over: max(0.05, to - from),
+                                           holdingLast: holdingLast)
             guard spread.count == range.count else { return }
             for (offset, word) in spread.enumerated() {
                 starts[range.lowerBound + offset] = word.start
@@ -285,7 +319,7 @@ public enum WordAlignment {
         // Before the first heard word: from the line's start, or just before the word.
         let first = keys[0]
         if first > 0 {
-            let natural = Double(old[0..<first].map { WordTiming.syllableCount(Substring($0.text)) }.reduce(0, +)) * 0.2
+            let natural = syllables(0..<first) * pace
             let from = max(previous, min(line.time, starts[first] - natural))
             fill(0..<first, from: from, to: starts[first])
         }
@@ -293,14 +327,14 @@ public enum WordAlignment {
         for (a, b) in zip(keys, keys.dropFirst()) where b > a + 1 {
             fill(a + 1..<b, from: min(ends[a], starts[b]), to: starts[b])
         }
-        // After the last heard word: as long as estimated, moved along with it.
+        // After the last heard word: at the song's pace, the line's end held a little.
         let last = keys[keys.count - 1]
         if last + 1 < old.count {
-            let span = old[old.count - 1].end - old[last + 1].start
+            let rest = last + 1..<old.count
             let from = ends[last]
-            var to = from + max(0.1, span)
+            var to = from + max(0.1, syllables(rest) * pace + 0.15)
             if let next { to = min(to, max(from + 0.1, next - 0.05)) }
-            fill(last + 1..<old.count, from: from, to: to)
+            fill(rest, from: from, to: to, holdingLast: true)
         }
         // Keep words in order and each ending before the next begins.
         for index in old.indices {
@@ -313,5 +347,30 @@ public enum WordAlignment {
         let time = max(previous + 0.01, min(line.time, starts[0]))
         return LyricLine(id: line.id, time: min(line.time, time), text: line.text, words: words,
                          wordSynced: line.wordSynced, heard: anchors.count)
+    }
+}
+
+/// What the speech recogniser is told to expect: the song's own lines. It then
+/// favours those words over whatever else the music sounds like.
+public enum ListeningHints {
+    /// The recogniser works best with up to about a hundred phrases.
+    public static let limit = 100
+
+    /// Distinct lines in the order they are sung, without section labels such
+    /// as "[Chorus]" or repeat marks such as "(x2)".
+    public static func phrases(from text: String) -> [String] {
+        var seen = Set<String>()
+        var phrases: [String] = []
+        for raw in text.components(separatedBy: .newlines) {
+            var line = raw.replacingOccurrences(of: #"\[[^\]]*\]|\((x|х)?\s*\d+\s*(x|х)?\)"#, with: " ",
+                                                options: [.regularExpression, .caseInsensitive])
+            line = line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                .trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.whitespaces))
+            let key = WordAlignment.normalize(line)
+            guard key.count >= 2, seen.insert(key).inserted else { continue }
+            phrases.append(line)
+            if phrases.count == limit { break }
+        }
+        return phrases
     }
 }
