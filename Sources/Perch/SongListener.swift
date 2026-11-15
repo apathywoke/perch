@@ -404,7 +404,7 @@ final class ListeningEngine {
     private var track: Track
     /// The lines of the song's lyrics, as hints for the recogniser.
     private var phrases: [String]
-    private var session: RecognitionSession?
+    private var session: ListeningSession?
     private var latency: Double = 0
     private var shift: Double = 0
     private var stopped = false
@@ -495,9 +495,11 @@ final class ListeningEngine {
         }
         if session == nil {
             let report = self.report
-            session = RecognitionSession(recognizer: recognizer, phrases: phrases) { words, from, to, listened in
+            let recognition = RecognitionSession(recognizer: recognizer, phrases: phrases) { words, from, to, listened in
                 DispatchQueue.main.async { report(.heard(words: words, from: from, to: to, listened: listened)) }
             }
+            // With neural voice separation on, the recogniser hears the voice alone.
+            session = VocalSeparator.shared.session(for: recognition)
             DispatchQueue.main.async { report(.listening) }
         }
         session?.feed(buffer, songTime: songTime)
@@ -532,6 +534,8 @@ final class RecognitionSession {
 
     private let lock = NSLock()
     private let output: Output
+    let recognizer: SongListener.Recognizer
+    let phrases: [String]
     private var analyzer: SpeechAnalyzer?
     private var input: AsyncStream<AnalyzerInput>.Continuation?
     private var format: AVAudioFormat?
@@ -565,6 +569,8 @@ final class RecognitionSession {
 
     init(recognizer: SongListener.Recognizer, phrases: [String], output: @escaping Output) {
         self.output = output
+        self.recognizer = recognizer
+        self.phrases = phrases
         Task { await prepare(recognizer, phrases: phrases) }
     }
 

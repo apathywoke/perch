@@ -62,6 +62,8 @@ enum Pref {
     static let lyricsSpace = "lyricsSpace"
     static let lyricsDelay = "lyricsDelay"
     static let lyricsListen = "lyricsListen"
+    /// A neural network takes the music out before the recogniser listens (downloads a model).
+    static let lyricsListenSeparate = "lyricsListenSeparate"
     // Updates (off unless the user turns them on)
     static let updateChecks = "updateChecks"
     static let lastUpdateCheck = "lastUpdateCheck"
@@ -115,6 +117,7 @@ enum Pref {
         lyricsSpace: LyricsSpace.medium.rawValue,
         lyricsDelay: 0.0,
         lyricsListen: false,
+        lyricsListenSeparate: false,
     ]
 
     private static var store: UserDefaults { .standard }

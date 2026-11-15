@@ -46,7 +46,7 @@ enum Diagnostics {
         section("Shortcuts", HotkeyCenter.shared.diagnosticRows())
         section("Updates", Updater.shared.diagnosticRows())
         section("Lyrics", LyricsService.shared.diagnosticRows())
-        section("Listening", SongListener.shared.diagnosticRows())
+        section("Listening", SongListener.shared.diagnosticRows() + VocalSeparator.shared.diagnosticRows())
         section("Settings", settingsRows())
         section("Recent log (30 min)", recentLog())
         return lines.joined(separator: "\n")

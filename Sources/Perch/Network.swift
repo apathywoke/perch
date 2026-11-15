@@ -2,7 +2,7 @@ import Foundation
 
 /// The only place where Perch reaches the network. Requests go through the
 /// system `curl`, over HTTPS only, to the hosts listed here, and only for the
-/// features the user turned on: update checks and lyrics.
+/// features the user turned on: update checks, lyrics and the voice separation model.
 /// Scripts/check.sh fails if network code appears anywhere else.
 enum Network {
     static let allowedHosts: Set<String> = ["api.github.com", "github.com", "lrclib.net"]
@@ -16,7 +16,7 @@ enum Network {
     static func get(_ url: URL, headers: [String: String] = [:]) throws -> Response {
         try check(url)
         let marker = "\n#perch-status:"
-        let arguments = baseArguments
+        let arguments = baseArguments()
             + headers.sorted { $0.key < $1.key }.flatMap { ["--header", "\($0.key): \($0.value)"] }
             + ["--write-out", "\(marker)%{http_code}", url.absoluteString]
         let output = try run(arguments)
@@ -28,9 +28,10 @@ enum Network {
     }
 
     /// Download to a file; fails on any HTTP error.
-    static func download(_ url: URL, to file: URL, maxBytes: Int) throws {
+    static func download(_ url: URL, to file: URL, maxBytes: Int, maxSeconds: Int = 60) throws {
         try check(url)
-        try run(baseArguments + ["--fail", "--max-filesize", String(maxBytes), "--output", file.path, url.absoluteString])
+        try run(baseArguments(maxSeconds: maxSeconds)
+                + ["--fail", "--max-filesize", String(maxBytes), "--output", file.path, url.absoluteString])
     }
 
     private static func check(_ url: URL) throws {
@@ -40,9 +41,9 @@ enum Network {
     }
 
     /// --disable must come first: it stops curl from reading a user's ~/.curlrc.
-    private static var baseArguments: [String] {
+    private static func baseArguments(maxSeconds: Int = 60) -> [String] {
         ["--disable", "--silent", "--show-error", "--location", "--proto", "=https", "--proto-redir", "=https",
-         "--max-time", "60", "--user-agent", userAgent]
+         "--max-time", String(maxSeconds), "--user-agent", userAgent]
     }
 
     /// LRCLIB asks clients to name themselves; this names the app, nothing about the user.

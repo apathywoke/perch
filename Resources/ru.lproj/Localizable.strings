@@ -293,6 +293,20 @@
 "No Screen Recording or microphone access. The player's sound is heard only if you turn on timing words by ear, and never leaves this Mac." = "Нет доступа к записи экрана и микрофону. Звук плеера слушается, только если включено уточнение тайминга по звуку, и не покидает этот Mac.";
 "This song is already timed by ear" = "Эта песня уже выверена по звуку";
 
+/* Neural voice separation */
+"Separate the voice from the music" = "Отделять голос от музыки";
+"Download the model" = "Скачать модель";
+"Downloading the model" = "Скачивание модели";
+"Preparing the model" = "Подготовка модели";
+"Model on this Mac" = "Модель на этом Mac";
+"Delete…" = "Удалить…";
+"Delete" = "Удалить";
+"Delete the voice separation model?" = "Удалить модель отделения голоса?";
+"Turning the option on again downloads it again." = "Если снова включить этот параметр, она скачается заново.";
+"The downloaded model is damaged." = "Скачанная модель повреждена.";
+"The model could not be unpacked." = "Не удалось распаковать модель.";
+"A neural network (Spleeter by Deezer) takes the music out before the recogniser listens, so it hears the voice nearly alone and catches more words. Turning this on downloads the model once from Perch's GitHub page (about 36 MB). It runs only while Perch listens, on this Mac, and then uses more of the processor, graphics and battery. The sound and the model stay on this Mac." = "Нейросеть (Spleeter от Deezer) убирает музыку до того, как звук попадёт в распознавание: оно слышит почти один голос и разбирает больше слов. При включении модель один раз скачивается со страницы Perch на GitHub (около 36 МБ). Она работает только пока Perch слушает, прямо на этом Mac, и в это время сильнее нагружает процессор и графику и расходует больше заряда. Звук и модель остаются на этом Mac.";
+
 /* Your own lyrics files */
 "Add lyrics…" = "Добавить текст…";
 "Choose a lyrics file for this song: LRC with timing, or plain text." = "Выберите файл с текстом песни: LRC с таймкодами или обычный текст.";

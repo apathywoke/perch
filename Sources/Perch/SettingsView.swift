@@ -570,6 +570,9 @@ private struct LyricsPane: View {
                          ? "Perch listens to the player and recognises the sung words on this Mac to time the lyrics exactly. Nothing is recorded or sent; what was heard is remembered per song, so the next listen is exact from the start. macOS asks for permission and shows the recording indicator while Perch listens. Works with songs in most languages, Russian and English included; the speech model may be downloaded from Apple once."
                          : "Needs macOS 26 or later.")
                 }
+                if listen && SongListener.isSupported {
+                    VoiceSeparationSection()
+                }
                 Section {
                     LabeledContent("Your lyrics files") {
                         HStack(spacing: 10) {
@@ -658,6 +661,59 @@ private struct LyricsPane: View {
             case .learned: NSLocalizedString("This song is already timed by ear", comment: "")
             case .noSound: NSLocalizedString("No sound: allow Perch to record system audio", comment: "")
             case .failed(let message): message
+            }
+        }
+    }
+
+    /// Neural voice separation: the toggle, the model's download and its removal.
+    private struct VoiceSeparationSection: View {
+        @ObservedObject private var separator = VocalSeparator.shared
+        @AppStorage(Pref.lyricsListenSeparate) private var separate = false
+        @State private var confirmDelete = false
+
+        var body: some View {
+            Section {
+                Toggle("Separate the voice from the music", isOn: $separate)
+                    .onChange(of: separate) { _, on in
+                        if on { separator.install() }
+                    }
+                switch separator.state {
+                case .absent:
+                    if separate {
+                        Button("Download the model") { separator.install() }
+                    }
+                case .downloading(let part):
+                    LabeledContent("Downloading the model") {
+                        ProgressView(value: part)
+                            .frame(width: 140)
+                    }
+                case .preparing:
+                    LabeledContent("Preparing the model") {
+                        ProgressView().controlSize(.small)
+                    }
+                case .ready:
+                    LabeledContent("Model on this Mac") {
+                        HStack(spacing: 10) {
+                            Text(verbatim: ByteCountFormatter.string(fromByteCount: separator.installedSize(), countStyle: .file))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                            Button("Delete…") { confirmDelete = true }
+                        }
+                    }
+                    .confirmationDialog("Delete the voice separation model?", isPresented: $confirmDelete) {
+                        Button("Delete", role: .destructive) { separator.delete() }
+                    } message: {
+                        Text("Turning the option on again downloads it again.")
+                    }
+                case .failed(let message):
+                    LabeledContent {
+                        Button("Try again") { separator.install() }
+                    } label: {
+                        Text(verbatim: message).foregroundStyle(.orange).lineLimit(2)
+                    }
+                }
+            } footer: {
+                Text("A neural network (Spleeter by Deezer) takes the music out before the recogniser listens, so it hears the voice nearly alone and catches more words. Turning this on downloads the model once from Perch's GitHub page (about 36 MB). It runs only while Perch listens, on this Mac, and then uses more of the processor, graphics and battery. The sound and the model stay on this Mac.")
             }
         }
     }

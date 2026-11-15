@@ -49,7 +49,7 @@ Artwork and a visualizer sit beside the notch. Hover over it, and the island ope
 - One-click updates from GitHub, if you want them: update checks are off by default.
 - Lyrics in the style of Apple Music: the current line lights up word by word, the text scrolls with the song, and tapping a line jumps to it. When LRCLIB has the timing of every word, the highlight is exact; otherwise word timing is estimated from syllables. Optional, off by default.
 - Your own lyrics: for songs LRCLIB lacks, choose an LRC or plain-text file (“Add lyrics…” under the player), or put it in `~/Library/Application Support/Perch/Lyrics` named “Artist - Title.lrc”. Your file replaces LRCLIB and needs no network.
-- Timing by ear (experimental, macOS 26+): while lyrics are open, Perch listens to the player, recognises the sung words on your Mac and fits the highlight to them, also fixing lines that LRCLIB marks too early or too late. What it hears is remembered for each song, so from the second listen the timing is right from the start and Perch no longer needs to listen. Works with most languages, English and Russian included. Lyrics without timestamps (your own files and unsynced LRCLIB entries) are synced to the heard words as the song plays.
+- Timing by ear (experimental, macOS 26+): while lyrics are open, Perch listens to the player, recognises the sung words on your Mac and fits the highlight to them, also fixing lines that LRCLIB marks too early or too late. What it hears is remembered for each song, so from the second listen the timing is right from the start and Perch no longer needs to listen. Works with most languages, English and Russian included. Lyrics without timestamps (your own files and unsynced LRCLIB entries) are synced to the heard words as the song plays. Optionally, a neural network (Spleeter, on your Mac) takes the music out first, so the recogniser catches many more words in heavily produced songs.
 - The island hides while the screen is recorded or shared (optional).
 
 ## Settings
@@ -121,14 +121,15 @@ It works only on this Mac, and nothing else trusts it. You can delete it in Keyc
 ## Privacy and security
 
 - No telemetry, analytics or crash reports.
-- Perch goes online for two features only, and both are off until you turn them on:
+- Perch goes online for three features only, and all are off until you turn them on:
   - **update checks**: asks GitHub for the latest release;
   - **lyrics**: when you open the lyrics, the song's title, artist, album and length go to lrclib.net. Lyrics are kept in memory only.
+  - **voice separation model**: when you turn on “Separate the voice from the music”, the model (about 36 MB) is downloaded once from Perch's GitHub releases and installed only if its SHA-256 matches the one in the code.
 - Every request is made by the system `curl` from one file, [`Network.swift`](Sources/Perch/Network.swift), over HTTPS only and only to github.com and lrclib.net. `Scripts/check.sh` makes sure networking appears nowhere else.
 - “Hide while the screen is recorded or shared”: the island asks recording apps not to capture it, and disappears completely while recording, because ScreenCaptureKit on macOS 15.4+ ignores that request. Perch learns about recording through the private function `SLSIsScreenWatcherPresent`. Screenshots (⌘⇧3) may still include the island.
 - An update is installed only if the new app is signed the same way as the installed one (same certificate). An ad hoc signed copy can't be updated in place; download the new version by hand.
 - Perch never asks for Screen Recording or the microphone. The visualizer is decorative and doesn't analyse sound.
-- “Time words by ear” (off by default): while lyrics are open, Perch takes the sound of the player app only, through a private Core Audio tap, and passes it to the macOS speech recognizer, which runs on your Mac. The sound is not recorded and goes nowhere. Only the recognised words and their timing are kept, in `~/Library/Application Support/Perch/Heard`, in files named by a hash of the song. “Forget what was heard…” erases them. macOS asks for permission to record system audio and shows the recording indicator while Perch listens. macOS may download the speech model from Apple once.
+- “Time words by ear” (off by default): while lyrics are open, Perch takes the sound of the player app only, through a private Core Audio tap, and passes it to the macOS speech recognizer, which runs on your Mac. The sound is not recorded and goes nowhere. Only the recognised words and their timing are kept, in `~/Library/Application Support/Perch/Heard`, in files named by a hash of the song. “Forget what was heard…” erases them. macOS asks for permission to record system audio and shows the recording indicator while Perch listens. macOS may download the speech model from Apple once. With “Separate the voice from the music” on, the sound first goes through a neural network (Spleeter 2stems by Deezer, MIT licence) on your Mac, only while Perch listens; it is kept in `~/Library/Application Support/Perch/Models` and “Delete…” removes it.
 - Accessibility is needed only for the optional volume and brightness indicators: to keep the system indicator from appearing, Perch intercepts those keys and changes the value itself. The tap listens only to the system's media-key events; ordinary key presses never reach it. Volume is changed through CoreAudio, brightness through the private `DisplayServices` (there is no public API).
 - Island events need no new permissions. Perch reads Focus from the menu bar through the same Accessibility permission: macOS has no public way to learn when it changes. Caps Lock comes from the modifier-key state (Perch doesn't see which keys are pressed). Charging comes from IOKit, headphones from changes of the audio output device. The microphone and camera come from the “device is running somewhere” flags in CoreAudio and CoreMediaIO: Perch opens, hears and sees nothing.
 - macOS asks for permission to control Spotify or Music (AppleScript) in two cases: when the fallback source is in use and you press a player button, and when lyrics are open for a Spotify song. In the second case Perch asks Spotify every two seconds for the position and track name only: what Spotify reports to the system drifts from the real position by half a second after a track change, sometimes by several seconds.
@@ -159,6 +160,7 @@ Sources/PerchCore/                logic without UI, covered by tests
   Lyrics.swift                    LRC format, current line, LRCLIB requests
   WordAlignment.swift             matching lyrics to heard words
   UntimedLyrics.swift             timing lyrics without timestamps by ear, parsing your own files
+  SpectralSeparator.swift         voice separation: spectrogram in, mask, voice out
   Version.swift                   comparing versions for updates
 Sources/Perch/                    the app
   main.swift, AppDelegate.swift   launch, menu bar, Settings and welcome windows
@@ -182,10 +184,11 @@ Sources/Perch/                    the app
   LyricsService.swift, LyricsView.swift   lyrics from LRCLIB and your own files
   UserLyricsStore.swift           your lyrics folder, choosing a file
   SongListener.swift              timing by ear: audio tap, recognition, storage
+  VocalSeparator.swift            voice separation: the model's download and the network
 Tests/PerchCoreTests/             unit tests (Swift Testing)
 Helper/                           bridge to Now Playing (Objective-C + Perl)
 Resources/                        Info.plist, en / ru localizations
-Scripts/                          checks, signing certificate, icon, README demo
+Scripts/                          checks, signing certificate, icon, README demo, voice model conversion
 docs/                             README images
 ```
 
